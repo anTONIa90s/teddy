@@ -156,9 +156,28 @@ namespace TeddyBench
                     }
                     catch (Exception e)
                     {
-                        TonieInfoString = "| Download Failed";
+                        TonieInfoString = "| Download Failed - attempting local fallback";
                         ReportException("Downloader", e);
-                        return;
+
+                        try
+                        {
+                            if (File.Exists("tonies.json"))
+                            {
+                                jsonContent = File.ReadAllText("tonies.json");
+                                TonieInfoString = "| Loaded local tonies.json";
+                            }
+                            else
+                            {
+                                TonieInfoString = "| Download Failed - no local tonies.json available";
+                                return;
+                            }
+                        }
+                        catch (Exception fe)
+                        {
+                            TonieInfoString = "| Local fallback failed";
+                            ReportException("Reading local tonies.json", fe);
+                            return;
+                        }
                     }
 
                     if (string.IsNullOrEmpty(jsonContent))
@@ -2240,25 +2259,19 @@ namespace TeddyBench
             TagOperationDialog opDlg = new TagOperationDialog();
 
             opDlg.Show();
-            try
+            Proxmark3.MeasurementResult result = RfidReader.MeasureAntenna();
+
+            opDlg.Close();
+
+            if (result == null)
             {
-                Proxmark3.MeasurementResult result = RfidReader.MeasureAntenna();
-
-                opDlg.Close();
-
-                if (result == null)
-                {
-                    MessageBox.Show("Measurement failed.", "Failed");
-                    return;
-                }
-
-                PlotAntennaForm form = new PlotAntennaForm(result);
-
-                form.ShowDialog();
+                MessageBox.Show("Measurement failed.", "Failed");
+                return;
             }
-            catch (Exception ex)
-            {
-            }
+
+            PlotAntennaForm form = new PlotAntennaForm(result);
+
+            form.ShowDialog();
         }
 
         private void flashFirmwareToolStripMenuItem_Click(object sender, EventArgs e)
@@ -2269,13 +2282,7 @@ namespace TeddyBench
             dlg.Filter = "Firmware ELF files (*.elf)|*.elf|All files (*.*)|*.*";
             if (dlg.ShowDialog() == DialogResult.OK)
             {
-                try
-                {
-                    RfidReader.EnterBootloader(dlg.FileName);
-                }
-                catch (Exception ex)
-                {
-                }
+                RfidReader.EnterBootloader(dlg.FileName);
             }
         }
 
@@ -2287,13 +2294,7 @@ namespace TeddyBench
             dlg.Filter = "Bootloader ELF files (*.elf)|*.elf|All files (*.*)|*.*";
             if (dlg.ShowDialog() == DialogResult.OK)
             {
-                try
-                {
-                    RfidReader.EnterBootloader(dlg.FileName);
-                }
-                catch (Exception ex)
-                {
-                }
+                RfidReader.EnterBootloader(dlg.FileName);
             }
         }
 
