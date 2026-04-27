@@ -81,6 +81,8 @@
             this.renameToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.deleteToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.assignNewUIDToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.setCustomImageToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.resetCustomImageToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.toolStripMenuItem2 = new System.Windows.Forms.ToolStripSeparator();
             this.showInExplorerToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.exportTooggToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
@@ -532,13 +534,15 @@
             this.renameToolStripMenuItem,
             this.deleteToolStripMenuItem,
             this.assignNewUIDToolStripMenuItem,
+            this.setCustomImageToolStripMenuItem,
+            this.resetCustomImageToolStripMenuItem,
             this.toolStripMenuItem2,
             this.showInExplorerToolStripMenuItem,
             this.exportTooggToolStripMenuItem,
             this.exportToToolStripMenuItem,
             this.sendDiagnosticsReportToolStripMenuItem});
             this.TonieContextMenu.Name = "contextMenuStrip1";
-            this.TonieContextMenu.Size = new System.Drawing.Size(199, 186);
+            this.TonieContextMenu.Size = new System.Drawing.Size(199, 230);
             // 
             // toggleLiveFlagToolStripMenuItem
             // 
@@ -567,9 +571,23 @@
             this.assignNewUIDToolStripMenuItem.Size = new System.Drawing.Size(198, 22);
             this.assignNewUIDToolStripMenuItem.Text = "Assign new UID";
             this.assignNewUIDToolStripMenuItem.Click += new System.EventHandler(this.assignNewUIDToolStripMenuItem_Click);
-            // 
+            //
+            // setCustomImageToolStripMenuItem
+            //
+            this.setCustomImageToolStripMenuItem.Name = "setCustomImageToolStripMenuItem";
+            this.setCustomImageToolStripMenuItem.Size = new System.Drawing.Size(198, 22);
+            this.setCustomImageToolStripMenuItem.Text = "Set custom image...";
+            this.setCustomImageToolStripMenuItem.Click += new System.EventHandler(this.setCustomImageToolStripMenuItem_Click);
+            //
+            // resetCustomImageToolStripMenuItem
+            //
+            this.resetCustomImageToolStripMenuItem.Name = "resetCustomImageToolStripMenuItem";
+            this.resetCustomImageToolStripMenuItem.Size = new System.Drawing.Size(198, 22);
+            this.resetCustomImageToolStripMenuItem.Text = "Reset custom image";
+            this.resetCustomImageToolStripMenuItem.Click += new System.EventHandler(this.resetCustomImageToolStripMenuItem_Click);
+            //
             // toolStripMenuItem2
-            // 
+            //
             this.toolStripMenuItem2.Name = "toolStripMenuItem2";
             this.toolStripMenuItem2.Size = new System.Drawing.Size(195, 6);
             // 
@@ -670,6 +688,8 @@
         private System.Windows.Forms.ToolStripMenuItem renameToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem deleteToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem assignNewUIDToolStripMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem setCustomImageToolStripMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem resetCustomImageToolStripMenuItem;
         private System.Windows.Forms.ToolStripSeparator toolStripMenuItem2;
         private System.Windows.Forms.ToolStripMenuItem showInExplorerToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem exportTooggToolStripMenuItem;

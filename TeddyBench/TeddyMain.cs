@@ -63,6 +63,8 @@ namespace TeddyBench
         private bool PlayThreadStop = true;
         private bool TrackMouseDown = false;
         private int TrackNewPosition = -1;
+        private const string CustomImageFolder = "customImages";
+        private const string CustomImageKeyPrefix = "custom:";
 
         public class ListViewTag
         {
@@ -1022,6 +1024,35 @@ namespace TeddyBench
                                 bool live = tag.FileInfo.Attributes.HasFlag(FileAttributes.Hidden);
                                 string newText = (live ? "[live] " : "") +  tonieName;
                                 string newImakeKey = image;
+                                if (newImakeKey == "custom")
+                                {
+                                    try
+                                    {
+                                        string customPath = GetCustomImagePath(hash);
+                                        if (File.Exists(customPath))
+                                        {
+                                            string customImageKey = GetCustomImageKey(hash);
+                                            if (!lstTonies.LargeImageList.Images.ContainsKey(customImageKey))
+                                            {
+                                                Image cimg = LoadResizedImage(customPath);
+                                                this.BeginInvoke(new Action(() =>
+                                                {
+                                                    try
+                                                    {
+                                                        ReplaceImageListImage(customImageKey, cimg);
+                                                    }
+                                                    catch
+                                                    {
+                                                        cimg.Dispose();
+                                                    }
+                                                }));
+                                            }
+
+                                            newImakeKey = customImageKey;
+                                        }
+                                    }
+                                    catch { }
+                                }
                                 string newToolTipText =
                                     "File:     " + tag.FileName + Environment.NewLine +
                                     "Name:     " + tag.Info.Title + Environment.NewLine +
@@ -1096,6 +1127,46 @@ namespace TeddyBench
             }
 
             return null;
+        }
+
+        private static string GetCustomImageKey(string hash)
+        {
+            return CustomImageKeyPrefix + hash;
+        }
+
+        private static string GetCustomImagePath(string hash)
+        {
+            return Path.Combine(CustomImageFolder, hash + ".png");
+        }
+
+        private static Image LoadResizedImage(string fileName)
+        {
+            byte[] imageBytes = File.ReadAllBytes(fileName);
+            using (MemoryStream stream = new MemoryStream(imageBytes))
+            using (Image img = Image.FromStream(stream))
+            {
+                return ResizeImage(img, 128, 128);
+            }
+        }
+
+        private void ReplaceImageListImage(string key, Image image)
+        {
+            if (lstTonies.LargeImageList.Images.ContainsKey(key))
+            {
+                lstTonies.LargeImageList.Images.RemoveByKey(key);
+            }
+
+            lstTonies.LargeImageList.Images.Add(key, image);
+        }
+
+        private bool IsCustomTonieItem(ListViewItem item)
+        {
+            if (item == null)
+            {
+                return false;
+            }
+
+            return item.ImageKey == "custom" || item.ImageKey.StartsWith(CustomImageKeyPrefix);
         }
 
         private TonieAudio GetTonieAudio(string fileName)
@@ -1420,6 +1491,84 @@ namespace TeddyBench
             ReassignSelected();
         }
 
+        private void setCustomImageToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            if (LastSelectediItem == null || !IsCustomTonieItem(LastSelectediItem))
+            {
+                return;
+            }
+
+            ListViewTag tag = LastSelectediItem.Tag as ListViewTag;
+            if (tag == null || string.IsNullOrEmpty(tag.Hash))
+            {
+                MessageBox.Show("Please wait until this custom Tonie has finished loading.", "Set custom image");
+                return;
+            }
+
+            OpenFileDialog dlg = new OpenFileDialog();
+            dlg.Filter = "Image files (*.png;*.jpg;*.jpeg;*.bmp;*.gif)|*.png;*.jpg;*.jpeg;*.bmp;*.gif|All files (*.*)|*.*";
+            dlg.Title = "Select custom image";
+
+            if (dlg.ShowDialog() != DialogResult.OK)
+            {
+                return;
+            }
+
+            try
+            {
+                Directory.CreateDirectory(CustomImageFolder);
+
+                using (Image resized = LoadResizedImage(dlg.FileName))
+                {
+                    resized.Save(GetCustomImagePath(tag.Hash), ImageFormat.Png);
+                    ReplaceImageListImage(GetCustomImageKey(tag.Hash), (Image)resized.Clone());
+                }
+
+                LastSelectediItem.ImageKey = GetCustomImageKey(tag.Hash);
+                UpdateSorting();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Failed to set custom image: " + ex.Message, "Set custom image failed");
+            }
+        }
+
+        private void resetCustomImageToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            if (LastSelectediItem == null || !IsCustomTonieItem(LastSelectediItem))
+            {
+                return;
+            }
+
+            ListViewTag tag = LastSelectediItem.Tag as ListViewTag;
+            if (tag == null || string.IsNullOrEmpty(tag.Hash))
+            {
+                return;
+            }
+
+            try
+            {
+                string customImagePath = GetCustomImagePath(tag.Hash);
+                if (File.Exists(customImagePath))
+                {
+                    File.Delete(customImagePath);
+                }
+
+                string customImageKey = GetCustomImageKey(tag.Hash);
+                LastSelectediItem.ImageKey = "custom";
+                if (lstTonies.LargeImageList.Images.ContainsKey(customImageKey))
+                {
+                    lstTonies.LargeImageList.Images.RemoveByKey(customImageKey);
+                }
+
+                UpdateSorting();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Failed to reset custom image: " + ex.Message, "Reset custom image failed");
+            }
+        }
+
         private void showInExplorerToolStripMenuItem_Click(object sender, EventArgs e)
         {
             if (LastSelectediItem != null)
@@ -1434,6 +1583,21 @@ namespace TeddyBench
             await ReportSelected();
         }
 
+        private void UpdateTonieContextMenu()
+        {
+            bool isCustom = IsCustomTonieItem(LastSelectediItem);
+            setCustomImageToolStripMenuItem.Visible = isCustom;
+            setCustomImageToolStripMenuItem.Enabled = isCustom;
+            resetCustomImageToolStripMenuItem.Visible = isCustom;
+
+            ListViewTag tag = LastSelectediItem?.Tag as ListViewTag;
+            resetCustomImageToolStripMenuItem.Enabled =
+                isCustom &&
+                tag != null &&
+                !string.IsNullOrEmpty(tag.Hash) &&
+                File.Exists(GetCustomImagePath(tag.Hash));
+        }
+
         #endregion
 
         #region ListView callbacks
@@ -1442,9 +1606,13 @@ namespace TeddyBench
         {
             if (e.Button == MouseButtons.Right)
             {
-                if (lstTonies.FocusedItem.Bounds.Contains(e.Location))
+                ListViewItem clickedItem = lstTonies.GetItemAt(e.X, e.Y);
+                if (clickedItem != null)
                 {
-                    LastSelectediItem = lstTonies.SelectedItems[0];
+                    clickedItem.Selected = true;
+                    clickedItem.Focused = true;
+                    LastSelectediItem = clickedItem;
+                    UpdateTonieContextMenu();
                     TonieContextMenu.Show(System.Windows.Forms.Cursor.Position);
                 }
             }
@@ -1790,17 +1958,17 @@ namespace TeddyBench
             {
                 if (cmbSorting.SelectedIndex == 3)
                 {
-                    switch (item.ImageKey)
+                    if (item.ImageKey == "unknown")
                     {
-                        case "unknown":
-                            item.Group = lstTonies.Groups[0];
-                            break;
-                        case "custom":
-                            item.Group = lstTonies.Groups[1];
-                            break;
-                        default:
-                            item.Group = lstTonies.Groups[2];
-                            break;
+                        item.Group = lstTonies.Groups[0];
+                    }
+                    else if (item.ImageKey == "custom" || item.ImageKey.StartsWith(CustomImageKeyPrefix))
+                    {
+                        item.Group = lstTonies.Groups[1];
+                    }
+                    else
+                    {
+                        item.Group = lstTonies.Groups[2];
                     }
                 }
                 else
