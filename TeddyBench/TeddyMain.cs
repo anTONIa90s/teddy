@@ -1194,13 +1194,15 @@ namespace TeddyBench
             int dstWidth = width;
             int dstHeight = (int)(dstWidth / srcRatio);
 
-            if(dstHeight > image.Height)
+            if (dstHeight > height)
             {
                 dstHeight = height;
                 dstWidth = (int)(dstHeight * srcRatio);
             }
 
-            var destRect = new Rectangle(0, 0, dstWidth, dstHeight);
+            int dstX = (width - dstWidth) / 2;
+            int dstY = (height - dstHeight) / 2;
+            var destRect = new Rectangle(dstX, dstY, dstWidth, dstHeight);
             var destImage = new Bitmap(width, height);
 
             destImage.SetResolution(image.HorizontalResolution, image.VerticalResolution);

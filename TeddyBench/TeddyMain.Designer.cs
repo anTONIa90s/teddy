@@ -576,7 +576,7 @@
             //
             this.setCustomImageToolStripMenuItem.Name = "setCustomImageToolStripMenuItem";
             this.setCustomImageToolStripMenuItem.Size = new System.Drawing.Size(198, 22);
-            this.setCustomImageToolStripMenuItem.Text = "Set custom image...";
+            this.setCustomImageToolStripMenuItem.Text = "Set custom Image";
             this.setCustomImageToolStripMenuItem.Click += new System.EventHandler(this.setCustomImageToolStripMenuItem_Click);
             //
             // resetCustomImageToolStripMenuItem
