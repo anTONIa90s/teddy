@@ -86,6 +86,7 @@
             this.assignNewUIDToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.setCustomImageToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.resetCustomImageToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.changeChapterInformationToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.toolStripMenuItem2 = new System.Windows.Forms.ToolStripSeparator();
             this.showInExplorerToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.exportTooggToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
@@ -572,6 +573,7 @@
             this.assignNewUIDToolStripMenuItem,
             this.setCustomImageToolStripMenuItem,
             this.resetCustomImageToolStripMenuItem,
+            this.changeChapterInformationToolStripMenuItem,
             this.toolStripMenuItem2,
             this.showInExplorerToolStripMenuItem,
             this.exportTooggToolStripMenuItem,
@@ -622,6 +624,13 @@
             this.resetCustomImageToolStripMenuItem.Size = new System.Drawing.Size(198, 22);
             this.resetCustomImageToolStripMenuItem.Text = "Reset custom image";
             this.resetCustomImageToolStripMenuItem.Click += new System.EventHandler(this.resetCustomImageToolStripMenuItem_Click);
+            //
+            // changeChapterInformationToolStripMenuItem
+            //
+            this.changeChapterInformationToolStripMenuItem.Name = "changeChapterInformationToolStripMenuItem";
+            this.changeChapterInformationToolStripMenuItem.Size = new System.Drawing.Size(198, 22);
+            this.changeChapterInformationToolStripMenuItem.Text = "Change chapter information";
+            this.changeChapterInformationToolStripMenuItem.Click += new System.EventHandler(this.changeChapterInformationToolStripMenuItem_Click);
             //
             // toolStripMenuItem2
             //
@@ -727,6 +736,7 @@
         private System.Windows.Forms.ToolStripMenuItem assignNewUIDToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem setCustomImageToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem resetCustomImageToolStripMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem changeChapterInformationToolStripMenuItem;
         private System.Windows.Forms.ToolStripSeparator toolStripMenuItem2;
         private System.Windows.Forms.ToolStripMenuItem showInExplorerToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem exportTooggToolStripMenuItem;

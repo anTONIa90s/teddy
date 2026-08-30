@@ -43,7 +43,7 @@ namespace TeddyBench
 
         private static object TonieInfoLock = new object();
         private static TonieTools.TonieData[] TonieInfo = new TonieTools.TonieData[0];
-        private static Dictionary<string, string> TonieInfoCustom = new Dictionary<string, string>();
+        private static Dictionary<string, CustomTonieInfo> TonieInfoCustom = new Dictionary<string, CustomTonieInfo>();
         private static string TonieInfoString = "";
 
         private Dictionary<string, Tuple<TonieAudio, DateTime>> CachedAudios = new Dictionary<string, Tuple<TonieAudio, DateTime>>();
@@ -242,7 +242,7 @@ namespace TeddyBench
 
                     try
                     {
-                        TonieInfoCustom = JsonConvert.DeserializeObject<Dictionary<string, string>>(File.ReadAllText("customTonies.json"));
+                        TonieInfoCustom = LoadCustomTonieInfo(File.ReadAllText("customTonies.json"));
                     }
                     catch (FileNotFoundException e)
                     {
@@ -894,10 +894,11 @@ namespace TeddyBench
                                     }
                                     lock (TonieInfoLock)
                                     {
-                                        if (TonieInfoCustom.ContainsKey(hash))
+                                        CustomTonieInfo customInfo;
+                                        if (TonieInfoCustom.TryGetValue(hash, out customInfo) && !string.IsNullOrWhiteSpace(customInfo.Title))
                                         {
                                             LogWindow.Log(LogWindow.eLogLevel.DebugVerbose, "     known tonie, overriding name");
-                                            tonieName = TonieInfoCustom[hash];
+                                            tonieName = customInfo.Title;
                                         }
                                     }
                                     if (!string.IsNullOrEmpty(info.Pic) && !lstTonies.LargeImageList.Images.ContainsKey(hash))
@@ -921,11 +922,20 @@ namespace TeddyBench
 
                                     lock (TonieInfoLock)
                                     {
-                                        if (TonieInfoCustom.ContainsKey(hash))
+                                        CustomTonieInfo customInfo;
+                                        if (TonieInfoCustom.TryGetValue(hash, out customInfo))
                                         {
                                             LogWindow.Log(LogWindow.eLogLevel.DebugVerbose, "     known custom tonie");
-                                            tonieName = TonieInfoCustom[hash];
-                                            tag.Info.Title = tonieName;
+                                            if (!string.IsNullOrWhiteSpace(customInfo.Title))
+                                            {
+                                                tonieName = customInfo.Title;
+                                                tag.Info.Title = tonieName;
+                                            }
+                                            else
+                                            {
+                                                tonieName = "Unnamed Teddy - " + tonieName;
+                                                tag.Info.Title = "Unnamed Teddy";
+                                            }
                                             image = "custom";
                                             update = true;
                                         }
@@ -1055,6 +1065,63 @@ namespace TeddyBench
             }
 
             return null;
+        }
+
+        private static Dictionary<string, CustomTonieInfo> LoadCustomTonieInfo(string jsonContent)
+        {
+            var result = new Dictionary<string, CustomTonieInfo>();
+            JObject entries = JObject.Parse(jsonContent);
+
+            foreach (JProperty entry in entries.Properties())
+            {
+                CustomTonieInfo info;
+                if (entry.Value.Type == JTokenType.String)
+                {
+                    // Migrate the legacy hash-to-title format in memory.
+                    info = new CustomTonieInfo { Title = entry.Value.Value<string>() ?? "" };
+                }
+                else
+                {
+                    info = entry.Value.ToObject<CustomTonieInfo>() ?? new CustomTonieInfo();
+                }
+
+                result[entry.Name] = info;
+            }
+
+            return result;
+        }
+
+        private static CustomTonieInfo GetOrCreateCustomTonieInfo(string hash)
+        {
+            CustomTonieInfo info;
+            if (!TonieInfoCustom.TryGetValue(hash, out info))
+            {
+                info = new CustomTonieInfo();
+                TonieInfoCustom.Add(hash, info);
+            }
+            return info;
+        }
+
+        private static string[] GetCustomChapterTitles(string hash)
+        {
+            lock (TonieInfoLock)
+            {
+                CustomTonieInfo info;
+                if (TonieInfoCustom.TryGetValue(hash, out info) && info.Chapters != null)
+                {
+                    return info.Chapters;
+                }
+            }
+            return null;
+        }
+
+        public class CustomTonieInfo
+        {
+            [JsonProperty("title")]
+            public string Title = "";
+
+            [JsonProperty("chapters")]
+            public string[] Chapters;
         }
 
         private static string GetCustomImageKey(string hash)
@@ -1265,6 +1332,7 @@ namespace TeddyBench
         {
             private readonly TeddyMain Main;
             private int LastPct = 0;
+            public List<string> ChapterTitles { get; } = new List<string>();
 
             public EncodeCallback(TeddyMain main)
             {
@@ -1274,6 +1342,7 @@ namespace TeddyBench
             public override void FileStart(int track, string sourceFile)
             {
                 ParseName(track, sourceFile);
+                ChapterTitles.Add(Path.GetFileNameWithoutExtension(DisplayName));
                 Main.BeginInvoke(new Action(() => { Main.txtLog.Text += " File: " + ShortName; }));
             }
 
@@ -1329,6 +1398,7 @@ namespace TeddyBench
                 string newFile = Path.Combine(newDir, ReverseUid(uid).Substring(8, 8));
 
                 TonieAudio audio = null;
+                EncodeCallback callback = new EncodeCallback(this);
 
                 try
                 {
@@ -1336,7 +1406,7 @@ namespace TeddyBench
                     {
                         id = (uint)(DateTimeOffset.Now.ToUnixTimeSeconds() - 0x50000000);
                     }
-                    audio = new TonieAudio(filenames, id, cbr: new EncodeCallback(this));
+                    audio = new TonieAudio(filenames, id, cbr: callback);
                 }
                 catch (Exception ex)
                 {
@@ -1356,6 +1426,12 @@ namespace TeddyBench
                 try
                 {
                     File.WriteAllBytes(newFile, audio.FileContent);
+                    string hash = BitConverter.ToString(audio.Header.Hash).Replace("-", "");
+                    lock (TonieInfoLock)
+                    {
+                        GetOrCreateCustomTonieInfo(hash).Chapters = callback.ChapterTitles.ToArray();
+                    }
+                    SaveJson();
                 }
                 catch (Exception ex)
                 {
@@ -1499,6 +1575,49 @@ namespace TeddyBench
             }
         }
 
+        private void changeChapterInformationToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            if (LastSelectediItem == null || !IsCustomTonieItem(LastSelectediItem))
+            {
+                return;
+            }
+
+            ListViewTag tag = LastSelectediItem.Tag as ListViewTag;
+            if (tag == null || string.IsNullOrEmpty(tag.Hash))
+            {
+                MessageBox.Show("Please wait until this custom Tonie has finished loading.", "Change chapter information");
+                return;
+            }
+
+            TonieAudio audio = GetTonieAudio(tag.FileName);
+            string[] currentTitles = GetCustomChapterTitles(tag.Hash);
+            using (var dialog = new ChapterEditDialog(tag.Info?.Title, audio.Header.AudioChapters.Length, currentTitles))
+            {
+                if (dialog.ShowDialog(this) != DialogResult.OK)
+                {
+                    return;
+                }
+
+                lock (TonieInfoLock)
+                {
+                    CustomTonieInfo info = GetOrCreateCustomTonieInfo(tag.Hash);
+                    int titleCount = Math.Max(audio.Header.AudioChapters.Length, info.Chapters?.Length ?? 0);
+                    string[] titles = new string[titleCount];
+                    if (info.Chapters != null)
+                    {
+                        Array.Copy(info.Chapters, titles, info.Chapters.Length);
+                    }
+
+                    foreach (KeyValuePair<int, string> title in dialog.EnteredTitles)
+                    {
+                        titles[title.Key] = title.Value;
+                    }
+                    info.Chapters = titles;
+                }
+                SaveJson();
+            }
+        }
+
         private void showInExplorerToolStripMenuItem_Click(object sender, EventArgs e)
         {
             if (LastSelectediItem != null)
@@ -1519,6 +1638,8 @@ namespace TeddyBench
             setCustomImageToolStripMenuItem.Visible = isCustom;
             setCustomImageToolStripMenuItem.Enabled = isCustom;
             resetCustomImageToolStripMenuItem.Visible = isCustom;
+            changeChapterInformationToolStripMenuItem.Visible = isCustom;
+            changeChapterInformationToolStripMenuItem.Enabled = isCustom;
 
             ListViewTag tag = LastSelectediItem?.Tag as ListViewTag;
             resetCustomImageToolStripMenuItem.Enabled =
@@ -1606,11 +1727,7 @@ namespace TeddyBench
 
             lock (TonieInfoLock)
             {
-                if (!TonieInfoCustom.ContainsKey(tag.Hash))
-                {
-                    TonieInfoCustom.Add(tag.Hash, "");
-                }
-                TonieInfoCustom[tag.Hash] = e.Label;
+                GetOrCreateCustomTonieInfo(tag.Hash).Title = e.Label;
             }
 
             SaveJson();
@@ -1791,10 +1908,15 @@ namespace TeddyBench
                         }
                         TonieTools.TonieData info = null;
 
+                        titles = GetCustomChapterTitles(hashString);
+
                         if (found.Count() > 0)
                         {
                             info = found.First();
-                            titles = info.Tracks;
+                            if (titles == null)
+                            {
+                                titles = info.Tracks;
+                            }
                             tags.Add("ALBUM=" + info.Title);
                             tags.Add("ARTIST=" + info.Series);
                             tags.Add("LANGUAGE=" + info.Language);
@@ -2197,9 +2319,10 @@ namespace TeddyBench
             lock (TonieInfoLock)
             {
                 string customName = null;
-                if (TonieInfoCustom.ContainsKey(tag.Hash))
+                CustomTonieInfo customInfo;
+                if (TonieInfoCustom.TryGetValue(tag.Hash, out customInfo))
                 {
-                    customName = TonieInfoCustom[tag.Hash];
+                    customName = customInfo.Title;
                 }
                 TonieTools.DumpInfo(str, TonieTools.eDumpFormat.FormatText, tag.FileName, TonieInfo, customName);
             }
@@ -2535,7 +2658,7 @@ namespace TeddyBench
                 return;
             }
 
-            using (var dialog = new ChapterListDialog(tag.Info?.Title, tag.Info?.Tracks))
+            using (var dialog = new ChapterListDialog(tag.Info?.Title, GetCustomChapterTitles(tag.Hash) ?? tag.Info?.Tracks))
             {
                 dialog.ShowDialog(this);
             }
