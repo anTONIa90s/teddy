@@ -62,6 +62,7 @@
             this.grpCardContent = new System.Windows.Forms.GroupBox();
             this.splitContainer1 = new System.Windows.Forms.SplitContainer();
             this.splitContainer2 = new System.Windows.Forms.SplitContainer();
+            this.btnShowChapters = new System.Windows.Forms.Button();
             this.lblPlayTime = new System.Windows.Forms.Label();
             this.trackPlayPosition = new System.Windows.Forms.TrackBar();
             this.label1 = new System.Windows.Forms.Label();
@@ -354,9 +355,10 @@
             this.splitContainer2.Location = new System.Drawing.Point(0, 0);
             this.splitContainer2.Name = "splitContainer2";
             this.splitContainer2.Orientation = System.Windows.Forms.Orientation.Horizontal;
-            // 
+            //
             // splitContainer2.Panel1
-            // 
+            //
+            this.splitContainer2.Panel1.Controls.Add(this.btnShowChapters);
             this.splitContainer2.Panel1.Controls.Add(this.lblPlayTime);
             this.splitContainer2.Panel1.Controls.Add(this.trackPlayPosition);
             this.splitContainer2.Panel1.Controls.Add(this.label1);
@@ -370,21 +372,31 @@
             this.splitContainer2.SplitterDistance = 36;
             this.splitContainer2.SplitterWidth = 1;
             this.splitContainer2.TabIndex = 1;
-            // 
+            //
             // lblPlayTime
-            // 
+            //
             this.lblPlayTime.AutoSize = true;
-            this.lblPlayTime.Location = new System.Drawing.Point(591, 6);
+            this.lblPlayTime.Location = new System.Drawing.Point(522, 6);
             this.lblPlayTime.Name = "lblPlayTime";
             this.lblPlayTime.Size = new System.Drawing.Size(48, 13);
             this.lblPlayTime.TabIndex = 4;
             this.lblPlayTime.Text = "--:-- / --:--";
-            // 
+            //
+            // btnShowChapters
+            //
+            this.btnShowChapters.Location = new System.Drawing.Point(576, 2);
+            this.btnShowChapters.Name = "btnShowChapters";
+            this.btnShowChapters.Size = new System.Drawing.Size(105, 21);
+            this.btnShowChapters.TabIndex = 5;
+            this.btnShowChapters.Text = "Show chapters";
+            this.btnShowChapters.UseVisualStyleBackColor = true;
+            this.btnShowChapters.Click += new System.EventHandler(this.btnShowChapters_Click);
+            //
             // trackPlayPosition
-            // 
+            //
             this.trackPlayPosition.Location = new System.Drawing.Point(231, 0);
             this.trackPlayPosition.Name = "trackPlayPosition";
-            this.trackPlayPosition.Size = new System.Drawing.Size(356, 45);
+            this.trackPlayPosition.Size = new System.Drawing.Size(285, 45);
             this.trackPlayPosition.TabIndex = 3;
             this.trackPlayPosition.Scroll += new System.EventHandler(this.trackPlayPosition_Scroll);
             this.trackPlayPosition.MouseDown += new System.Windows.Forms.MouseEventHandler(this.trackPlayPosition_MouseDown);
@@ -466,9 +478,9 @@
             // 
             this.btnSave.Location = new System.Drawing.Point(4, 61);
             this.btnSave.Name = "btnSave";
-            this.btnSave.Size = new System.Drawing.Size(80, 23);
+            this.btnSave.Size = new System.Drawing.Size(80, 38);
             this.btnSave.TabIndex = 1;
-            this.btnSave.Text = "Save as .ogg...";
+            this.btnSave.Text = "Save as\r\n.ogg...";
             this.btnSave.UseVisualStyleBackColor = true;
             this.btnSave.Click += new System.EventHandler(this.btnSave_Click);
             // 
@@ -494,7 +506,7 @@
             //
             // btnSetAllLiveFlags
             //
-            this.btnSetAllLiveFlags.Location = new System.Drawing.Point(4, 90);
+            this.btnSetAllLiveFlags.Location = new System.Drawing.Point(4, 105);
             this.btnSetAllLiveFlags.Name = "btnSetAllLiveFlags";
             this.btnSetAllLiveFlags.Size = new System.Drawing.Size(80, 38);
             this.btnSetAllLiveFlags.TabIndex = 2;
@@ -504,7 +516,7 @@
             //
             // btnRemoveAllLiveFlags
             //
-            this.btnRemoveAllLiveFlags.Location = new System.Drawing.Point(4, 134);
+            this.btnRemoveAllLiveFlags.Location = new System.Drawing.Point(4, 149);
             this.btnRemoveAllLiveFlags.Name = "btnRemoveAllLiveFlags";
             this.btnRemoveAllLiveFlags.Size = new System.Drawing.Size(80, 38);
             this.btnRemoveAllLiveFlags.TabIndex = 3;
@@ -727,6 +739,7 @@
         private System.Windows.Forms.ToolStripMenuItem flashBootloaderToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem consoleModeToolStripMenuItem;
         private System.Windows.Forms.Button btnPlay;
+        private System.Windows.Forms.Button btnShowChapters;
         private System.Windows.Forms.TrackBar trackPlayPosition;
         private System.Windows.Forms.Label lblPlayTime;
         private System.Windows.Forms.ToolStripMenuItem reportNFCTagToolStripMenuItem;

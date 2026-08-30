@@ -2521,6 +2521,26 @@ namespace TeddyBench
             }
         }
 
+        private void btnShowChapters_Click(object sender, EventArgs e)
+        {
+            if (lstTonies.SelectedItems.Count != 1)
+            {
+                MessageBox.Show("Please select one Tonie first.", "Show chapters");
+                return;
+            }
+
+            ListViewTag tag = lstTonies.SelectedItems[0].Tag as ListViewTag;
+            if (tag == null)
+            {
+                return;
+            }
+
+            using (var dialog = new ChapterListDialog(tag.Info?.Title, tag.Info?.Tracks))
+            {
+                dialog.ShowDialog(this);
+            }
+        }
+
         private void WaveOut_PlaybackStopped(object sender, StoppedEventArgs e)
         {
             LogWindow.Log(LogWindow.eLogLevel.Debug, "Playback stopped");
