@@ -36,7 +36,6 @@ namespace TeddyBench
         private SafeThread EncodeThread = null;
         private SafeThread LogThread;
         private bool LogThreadStop;
-        private SafeThread UpdateCheckThread = null;
 
         private string CurrentDirectory = null;
         private bool AutoOpenDrive = true;
@@ -295,10 +294,6 @@ namespace TeddyBench
 
 
             StartThreads();
-
-            UpdateCheckThread = new SafeThread(UpdateCheck, "UpdateCheckThread");
-            UpdateCheckThread.Start();
-
             autodetectionEnabledToolStripMenuItem.Checked = Settings.NfcEnabled;
             ReportForm.DefaultUsername = Settings.Username;
             UpdateNfcReader();
@@ -532,67 +527,6 @@ namespace TeddyBench
             }
         }
 
-        public async void UpdateCheck()
-        {
-            try
-            {
-                string thisVersion = ThisAssembly.Git.BaseTag;
-                if (!string.IsNullOrEmpty(thisVersion))
-                {
-                    Thread.Sleep(2000);
-
-                    HttpClient client = new HttpClient();
-                    client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (compatible; TeddyBench/1.0)");
-                    async Task<JObject> GithubApiGet(string path) => JObject.Parse(await client.GetStringAsync($"https://api.github.com/{path}"));
-                    async Task<JObject> GithubLastRelease(string user, string repo) => await GithubApiGet($"repos/{user}/{repo}/releases/latest");
-
-                    async Task DownloadFile(string url, string destinationFileName)
-                    {
-                        using (var stream = await client.GetStreamAsync(url))
-                        {
-                            using (var file = new FileStream(destinationFileName, FileMode.Create))
-                            {
-                                stream.CopyTo(file);
-                            }
-                        }
-                    }
-
-                    dynamic latestRelease = await GithubLastRelease("toniebox-reverse-engineering", "teddy");
-                    string latestVersion = latestRelease.tag_name;
-
-                    if (latestVersion != thisVersion)
-                    {
-                        string destPath = new FileInfo(Assembly.GetExecutingAssembly().Location).DirectoryName;
-                        string zipName = Path.Combine(destPath, "TeddyBench.zip");
-
-                        if (latestRelease.assets[0].name == "TeddyBench.zip")
-                        {
-                            string url = latestRelease.assets[0].browser_download_url;
-
-                            BeginInvoke(new Action(async () =>
-                            {
-                                UpdateNotifyDialog dlg = new UpdateNotifyDialog(latestVersion + " (yours: " + thisVersion + ")", (string)latestRelease.name);
-                                if (dlg.ShowDialog() == DialogResult.Yes)
-                                {
-                                    await DownloadFile(url, zipName);
-                                    ProcessStartInfo startInfo = new ProcessStartInfo
-                                    {
-                                        Arguments = zipName,
-                                        FileName = "explorer.exe"
-                                    };
-
-                                    Process.Start(startInfo);
-                                }
-                            }));
-                        }
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-            }
-        }
-
         protected override void OnDragEnter(DragEventArgs e)
         {
             if (e.Data.GetDataPresent(DataFormats.FileDrop))
@@ -651,12 +585,6 @@ namespace TeddyBench
                 PlayThread = null;
             }
             StopAnalyzeThread();
-            if (UpdateCheckThread != null)
-            {
-                UpdateCheckThread.Join(100);
-                UpdateCheckThread.Abort();
-                UpdateCheckThread = null;
-            }
             if (EncodeThread != null)
             {
                 EncodeThread.Join(100);
@@ -2023,6 +1951,39 @@ namespace TeddyBench
                 else
                 {
                     tag.FileInfo.Attributes |= FileAttributes.Hidden;
+                }
+            }
+
+            RefreshCardContent();
+        }
+
+        private void btnSetAllLiveFlags_Click(object sender, EventArgs e)
+        {
+            SetAllLiveFlags(true);
+        }
+
+        private void btnRemoveAllLiveFlags_Click(object sender, EventArgs e)
+        {
+            SetAllLiveFlags(false);
+        }
+
+        private void SetAllLiveFlags(bool isLive)
+        {
+            foreach (ListViewItem item in lstTonies.Items)
+            {
+                ListViewTag tag = item.Tag as ListViewTag;
+                if (tag == null)
+                {
+                    continue;
+                }
+
+                if (isLive)
+                {
+                    tag.FileInfo.Attributes |= FileAttributes.Hidden;
+                }
+                else
+                {
+                    tag.FileInfo.Attributes &= ~FileAttributes.Hidden;
                 }
             }
 

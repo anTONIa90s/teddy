@@ -72,6 +72,8 @@
             this.btnSave = new System.Windows.Forms.Button();
             this.btnDelete = new System.Windows.Forms.Button();
             this.btnAdd = new System.Windows.Forms.Button();
+            this.btnSetAllLiveFlags = new System.Windows.Forms.Button();
+            this.btnRemoveAllLiveFlags = new System.Windows.Forms.Button();
             this.lblMessage = new System.Windows.Forms.Label();
             this.statusStrip1 = new System.Windows.Forms.StatusStrip();
             this.statusLabel = new System.Windows.Forms.ToolStripStatusLabel();
@@ -331,9 +333,11 @@
             // splitContainer1.Panel1
             // 
             this.splitContainer1.Panel1.Controls.Add(this.splitContainer2);
-            // 
+            //
             // splitContainer1.Panel2
-            // 
+            //
+            this.splitContainer1.Panel2.Controls.Add(this.btnRemoveAllLiveFlags);
+            this.splitContainer1.Panel2.Controls.Add(this.btnSetAllLiveFlags);
             this.splitContainer1.Panel2.Controls.Add(this.btnSave);
             this.splitContainer1.Panel2.Controls.Add(this.btnDelete);
             this.splitContainer1.Panel2.Controls.Add(this.btnAdd);
@@ -462,7 +466,7 @@
             // 
             this.btnSave.Location = new System.Drawing.Point(4, 61);
             this.btnSave.Name = "btnSave";
-            this.btnSave.Size = new System.Drawing.Size(87, 23);
+            this.btnSave.Size = new System.Drawing.Size(80, 23);
             this.btnSave.TabIndex = 1;
             this.btnSave.Text = "Save as .ogg...";
             this.btnSave.UseVisualStyleBackColor = true;
@@ -472,7 +476,7 @@
             // 
             this.btnDelete.Location = new System.Drawing.Point(4, 32);
             this.btnDelete.Name = "btnDelete";
-            this.btnDelete.Size = new System.Drawing.Size(87, 23);
+            this.btnDelete.Size = new System.Drawing.Size(80, 23);
             this.btnDelete.TabIndex = 0;
             this.btnDelete.Text = "Delete...";
             this.btnDelete.UseVisualStyleBackColor = true;
@@ -482,12 +486,32 @@
             // 
             this.btnAdd.Location = new System.Drawing.Point(4, 3);
             this.btnAdd.Name = "btnAdd";
-            this.btnAdd.Size = new System.Drawing.Size(87, 23);
+            this.btnAdd.Size = new System.Drawing.Size(80, 23);
             this.btnAdd.TabIndex = 0;
             this.btnAdd.Text = "Add...";
             this.btnAdd.UseVisualStyleBackColor = true;
             this.btnAdd.Click += new System.EventHandler(this.btnAdd_Click);
-            // 
+            //
+            // btnSetAllLiveFlags
+            //
+            this.btnSetAllLiveFlags.Location = new System.Drawing.Point(4, 90);
+            this.btnSetAllLiveFlags.Name = "btnSetAllLiveFlags";
+            this.btnSetAllLiveFlags.Size = new System.Drawing.Size(80, 38);
+            this.btnSetAllLiveFlags.TabIndex = 2;
+            this.btnSetAllLiveFlags.Text = "Set all\r\nlive flags";
+            this.btnSetAllLiveFlags.UseVisualStyleBackColor = true;
+            this.btnSetAllLiveFlags.Click += new System.EventHandler(this.btnSetAllLiveFlags_Click);
+            //
+            // btnRemoveAllLiveFlags
+            //
+            this.btnRemoveAllLiveFlags.Location = new System.Drawing.Point(4, 134);
+            this.btnRemoveAllLiveFlags.Name = "btnRemoveAllLiveFlags";
+            this.btnRemoveAllLiveFlags.Size = new System.Drawing.Size(80, 38);
+            this.btnRemoveAllLiveFlags.TabIndex = 3;
+            this.btnRemoveAllLiveFlags.Text = "Remove all\r\nlive flags";
+            this.btnRemoveAllLiveFlags.UseVisualStyleBackColor = true;
+            this.btnRemoveAllLiveFlags.Click += new System.EventHandler(this.btnRemoveAllLiveFlags_Click);
+            //
             // lblMessage
             // 
             this.lblMessage.AutoSize = true;
@@ -551,6 +575,7 @@
             this.toggleLiveFlagToolStripMenuItem.Text = "Toggle live flag";
             this.toggleLiveFlagToolStripMenuItem.Click += new System.EventHandler(this.toggleLiveFlagToolStripMenuItem_Click);
             // 
+            //
             // renameToolStripMenuItem
             // 
             this.renameToolStripMenuItem.Name = "renameToolStripMenuItem";
@@ -710,6 +735,8 @@
         private System.Windows.Forms.ToolStripMenuItem optionsToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem downloadToniesjsonOnStartupToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem downloadToniesjsonNowToolStripMenuItem;
+        private System.Windows.Forms.Button btnSetAllLiveFlags;
+        private System.Windows.Forms.Button btnRemoveAllLiveFlags;
     }
 }
 
