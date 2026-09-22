@@ -43,8 +43,10 @@
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(TrackSortDialog));
             this.btnCancel = new System.Windows.Forms.Button();
             this.btnEncode = new System.Windows.Forms.Button();
+            this.btnAddTracks = new System.Windows.Forms.Button();
             this.splitContainer1 = new System.Windows.Forms.SplitContainer();
             this.splitContainer2 = new System.Windows.Forms.SplitContainer();
+            this.btnDelete = new System.Windows.Forms.Button();
             this.btnDown = new System.Windows.Forms.Button();
             this.btnUp = new System.Windows.Forms.Button();
             this.lstTracks = new System.Windows.Forms.ListView();
@@ -82,6 +84,17 @@
             this.btnEncode.TabIndex = 1;
             this.btnEncode.Text = "Encode";
             this.btnEncode.UseVisualStyleBackColor = true;
+            //
+            // btnAddTracks
+            //
+            this.btnAddTracks.Dock = System.Windows.Forms.DockStyle.Left;
+            this.btnAddTracks.Location = new System.Drawing.Point(0, 0);
+            this.btnAddTracks.Name = "btnAddTracks";
+            this.btnAddTracks.Size = new System.Drawing.Size(75, 26);
+            this.btnAddTracks.TabIndex = 2;
+            this.btnAddTracks.Text = "Add tracks";
+            this.btnAddTracks.UseVisualStyleBackColor = true;
+            this.btnAddTracks.Click += new System.EventHandler(this.btnAddTracks_Click);
             // 
             // splitContainer1
             // 
@@ -100,6 +113,7 @@
             // 
             this.splitContainer1.Panel2.Controls.Add(this.btnEncode);
             this.splitContainer1.Panel2.Controls.Add(this.btnCancel);
+            this.splitContainer1.Panel2.Controls.Add(this.btnAddTracks);
             this.splitContainer1.Size = new System.Drawing.Size(808, 401);
             this.splitContainer1.SplitterDistance = 371;
             this.splitContainer1.TabIndex = 2;
@@ -109,9 +123,10 @@
             this.splitContainer2.Dock = System.Windows.Forms.DockStyle.Fill;
             this.splitContainer2.Location = new System.Drawing.Point(0, 0);
             this.splitContainer2.Name = "splitContainer2";
-            // 
+            //
             // splitContainer2.Panel1
-            // 
+            //
+            this.splitContainer2.Panel1.Controls.Add(this.btnDelete);
             this.splitContainer2.Panel1.Controls.Add(this.btnDown);
             this.splitContainer2.Panel1.Controls.Add(this.btnUp);
             // 
@@ -121,9 +136,20 @@
             this.splitContainer2.Size = new System.Drawing.Size(808, 371);
             this.splitContainer2.SplitterDistance = 85;
             this.splitContainer2.TabIndex = 1;
-            // 
+            //
+            // btnDelete
+            //
+            this.btnDelete.Dock = System.Windows.Forms.DockStyle.Top;
+            this.btnDelete.Location = new System.Drawing.Point(0, 46);
+            this.btnDelete.Name = "btnDelete";
+            this.btnDelete.Size = new System.Drawing.Size(85, 23);
+            this.btnDelete.TabIndex = 2;
+            this.btnDelete.Text = "Delete";
+            this.btnDelete.UseVisualStyleBackColor = true;
+            this.btnDelete.Click += new System.EventHandler(this.btnDelete_Click);
+            //
             // btnDown
-            // 
+            //
             this.btnDown.Dock = System.Windows.Forms.DockStyle.Top;
             this.btnDown.Location = new System.Drawing.Point(0, 23);
             this.btnDown.Name = "btnDown";
@@ -208,10 +234,12 @@
 
         private System.Windows.Forms.Button btnCancel;
         private System.Windows.Forms.Button btnEncode;
+        private System.Windows.Forms.Button btnAddTracks;
         private System.Windows.Forms.SplitContainer splitContainer1;
         private System.Windows.Forms.SplitContainer splitContainer2;
         private System.Windows.Forms.Button btnUp;
         private System.Windows.Forms.Button btnDown;
+        private System.Windows.Forms.Button btnDelete;
         private System.Windows.Forms.ListView lstTracks;
         private System.Windows.Forms.ColumnHeader columnHeader1;
         private System.Windows.Forms.ColumnHeader columnHeader2;

@@ -541,7 +541,7 @@ namespace TeddyBench
 
             if (drop != null)
             {
-                AddFiles(drop, GetAudioID());
+                AddFiles(drop);
             }
         }
 
@@ -1227,68 +1227,55 @@ namespace TeddyBench
 
             if (dlg.ShowDialog() == DialogResult.OK)
             {
-                AddFiles(dlg.FileNames, GetAudioID());
+                AddFiles(dlg.FileNames);
             }
         }
 
-        private void AddFiles(string[] fileNames, uint id = uint.MaxValue)
+        private void AddFiles(string[] fileNames)
         {
-            AskUIDForm ask = new AskUIDForm(RfidReader);
-
-            if (ask.ShowDialog() == DialogResult.OK)
+            if (fileNames.Count() == 1 && !(fileNames[0].ToLower().EndsWith(".mp3") || fileNames[0].ToLower().EndsWith(".ogg")))
             {
-                if (fileNames.Count() == 1)
+                AskUIDForm copyAsk = new AskUIDForm(RfidReader);
+                if (copyAsk.ShowDialog() != DialogResult.OK)
                 {
-                    string fileName = fileNames[0];
+                    return;
+                }
 
-                    if (fileName.ToLower().EndsWith(".mp3") || fileName.ToLower().EndsWith(".ogg"))
-                    {
-                        switch (MessageBox.Show("You are about to encode a single MP3/Ogg, is this right?", "Encode a file", MessageBoxButtons.YesNo))
-                        {
-                            case DialogResult.No:
-                                return;
-                            case DialogResult.Yes:
-                                EncodeFile(ask.Uid, new[] { fileName }, id);
-                                return;
-                        }
-                    }
-                    else
-                    {
-                        try
-                        {
-                            TonieAudio dumpFile = TonieAudio.FromFile(fileName);
+                try
+                {
+                    TonieAudio dumpFile = TonieAudio.FromFile(fileNames[0]);
 
-                            if (dumpFile.FileContent.Length > 0)
-                            {
-                                CopyFile(ask.Uid, fileName);
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            MessageBox.Show("The file you have chosen is not supported.", "Add file...");
-                            return;
-                        }
+                    if (dumpFile.FileContent.Length > 0)
+                    {
+                        CopyFile(copyAsk.Uid, fileNames[0]);
                     }
                 }
-                else
+                catch (Exception ex)
                 {
-                    if (fileNames.Where(f => !(f.ToLower().EndsWith(".mp3") || f.ToLower().EndsWith(".ogg"))).Count() > 0)
-                    {
-                        MessageBox.Show("Please select MP3/Ogg files only.", "Add file...");
-                        return;
-                    }
-
-                    TrackSortDialog sorter = new TrackSortDialog(fileNames);
-
-                    if(sorter.ShowDialog() == DialogResult.Cancel)
-                    {
-                        return;
-                    }
-
-                    string[] sorted = sorter.SortedFiles;
-
-                    EncodeFile(ask.Uid, sorted, id);
+                    MessageBox.Show("The file you have chosen is not supported.", "Add file...");
                 }
+
+                return;
+            }
+
+            if (fileNames.Where(f => !(f.ToLower().EndsWith(".mp3") || f.ToLower().EndsWith(".ogg"))).Count() > 0)
+            {
+                MessageBox.Show("Please select MP3/Ogg files only.", "Add file...");
+                return;
+            }
+
+            TrackSortDialog sorter = new TrackSortDialog(fileNames);
+
+            if (sorter.ShowDialog() == DialogResult.Cancel)
+            {
+                return;
+            }
+
+            uint id = GetAudioID();
+            AskUIDForm encodeAsk = new AskUIDForm(RfidReader);
+            if (encodeAsk.ShowDialog() == DialogResult.OK)
+            {
+                EncodeFile(encodeAsk.Uid, sorter.SortedFiles, id);
             }
         }
 

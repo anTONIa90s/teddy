@@ -98,6 +98,47 @@ namespace TeddyBench
             }
         }
 
+        private void btnAddTracks_Click(object sender, EventArgs e)
+        {
+            OpenFileDialog dlg = new OpenFileDialog();
+            dlg.Multiselect = true;
+            dlg.Filter = "Audio files (*.mp3;*.ogg)|*.mp3;*.ogg|All files (*.*)|*.*";
+
+            if (dlg.ShowDialog() != DialogResult.OK)
+            {
+                return;
+            }
+
+            if (dlg.FileNames.Any(f => !(f.ToLower().EndsWith(".mp3") || f.ToLower().EndsWith(".ogg"))))
+            {
+                MessageBox.Show("Please select MP3/Ogg files only.", "Add tracks");
+                return;
+            }
+
+            foreach (string fileName in dlg.FileNames)
+            {
+                FileList.Add(new Tuple<string, Id3Tag>(fileName, GetTag(fileName)));
+            }
+
+            UpdateView();
+        }
+
+        private void btnDelete_Click(object sender, EventArgs e)
+        {
+            if (lstTracks.SelectedItems.Count == 0)
+            {
+                return;
+            }
+
+            foreach (ListViewItem item in lstTracks.SelectedItems.Cast<ListViewItem>().ToArray())
+            {
+                lstTracks.Items.Remove(item);
+            }
+
+            RebuildFileList();
+            lstTracks.Select();
+        }
+
         private void btnUp_Click(object sender, EventArgs e)
         {
             if (lstTracks.SelectedIndices.Count == 0)
