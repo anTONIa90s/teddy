@@ -382,12 +382,12 @@
             //
             // lblPlayTime
             //
-            this.lblPlayTime.AutoSize = true;
-            this.lblPlayTime.Location = new System.Drawing.Point(522, 6);
+            this.lblPlayTime.Location = new System.Drawing.Point(474, 6);
             this.lblPlayTime.Name = "lblPlayTime";
-            this.lblPlayTime.Size = new System.Drawing.Size(48, 13);
+            this.lblPlayTime.Size = new System.Drawing.Size(96, 13);
             this.lblPlayTime.TabIndex = 4;
             this.lblPlayTime.Text = "--:-- / --:--";
+            this.lblPlayTime.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
             //
             // btnShowChapters
             //
@@ -403,7 +403,7 @@
             //
             this.trackPlayPosition.Location = new System.Drawing.Point(231, 0);
             this.trackPlayPosition.Name = "trackPlayPosition";
-            this.trackPlayPosition.Size = new System.Drawing.Size(285, 45);
+            this.trackPlayPosition.Size = new System.Drawing.Size(237, 45);
             this.trackPlayPosition.TabIndex = 3;
             this.trackPlayPosition.Scroll += new System.EventHandler(this.trackPlayPosition_Scroll);
             this.trackPlayPosition.MouseDown += new System.Windows.Forms.MouseEventHandler(this.trackPlayPosition_MouseDown);
