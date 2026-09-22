@@ -121,6 +121,10 @@ namespace TeddyBench
                         s1 = t1.Info?.SortString;
                         s2 = t2.Info?.SortString;
                         break;
+                    case 4:
+                        s1 = t1.Info?.Title;
+                        s2 = t2.Info?.Title;
+                        break;
                 }
 
                 if (s1 == null)

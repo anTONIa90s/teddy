@@ -430,7 +430,8 @@
             "UID",
             "Product Number",
             "Date",
-            "Type"});
+            "Type",
+            "Name"});
             this.cmbSorting.Location = new System.Drawing.Point(53, 3);
             this.cmbSorting.Name = "cmbSorting";
             this.cmbSorting.Size = new System.Drawing.Size(110, 21);
