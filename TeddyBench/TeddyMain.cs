@@ -64,6 +64,10 @@ namespace TeddyBench
         private int TrackNewPosition = -1;
         private const string CustomImageFolder = "customImages";
         private const string CustomImageKeyPrefix = "custom:";
+        private const string DesktopIniFileName = "desktop.ini";
+        private const string ShellClassInfoSection = ".ShellClassInfo";
+        private const string DocumentPropertiesSection = "{F29F85E0-4FF9-1068-AB91-08002B27B3D9}";
+        private const string TeddyBenchSection = "TeddyBench";
 
         public class ListViewTag
         {
@@ -1119,6 +1123,283 @@ namespace TeddyBench
             return null;
         }
 
+        private static string GetDesktopIniValue(string content, string sectionName, string key)
+        {
+            string currentSection = null;
+            foreach (string line in content.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n'))
+            {
+                string trimmedLine = line.Trim();
+                if (trimmedLine.StartsWith("[") && trimmedLine.EndsWith("]"))
+                {
+                    currentSection = trimmedLine.Substring(1, trimmedLine.Length - 2);
+                    continue;
+                }
+
+                if (!string.Equals(currentSection, sectionName, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                int separator = line.IndexOf('=');
+                if (separator >= 0 && string.Equals(line.Substring(0, separator).Trim(), key, StringComparison.OrdinalIgnoreCase))
+                {
+                    return line.Substring(separator + 1);
+                }
+            }
+
+            return null;
+        }
+
+        private static string SetDesktopIniValue(string content, string sectionName, string key, string value)
+        {
+            List<string> lines = content.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n').ToList();
+            if (lines.Count == 1 && lines[0].Length == 0)
+            {
+                lines.Clear();
+            }
+
+            int sectionStart = -1;
+            int sectionEnd = lines.Count;
+            for (int index = 0; index < lines.Count; index++)
+            {
+                if (string.Equals(lines[index].Trim(), "[" + sectionName + "]", StringComparison.OrdinalIgnoreCase))
+                {
+                    sectionStart = index;
+                    for (int next = index + 1; next < lines.Count; next++)
+                    {
+                        string line = lines[next].Trim();
+                        if (line.StartsWith("[") && line.EndsWith("]"))
+                        {
+                            sectionEnd = next;
+                            break;
+                        }
+                    }
+                    break;
+                }
+            }
+
+            if (sectionStart < 0)
+            {
+                if (value == null)
+                {
+                    return string.Join(Environment.NewLine, lines);
+                }
+
+                if (lines.Count > 0 && lines[lines.Count - 1].Length != 0)
+                {
+                    lines.Add(string.Empty);
+                }
+                lines.Add("[" + sectionName + "]");
+                lines.Add(key + "=" + value);
+                return string.Join(Environment.NewLine, lines);
+            }
+
+            for (int index = sectionStart + 1; index < sectionEnd; index++)
+            {
+                int separator = lines[index].IndexOf('=');
+                if (separator >= 0 && string.Equals(lines[index].Substring(0, separator).Trim(), key, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (value == null)
+                    {
+                        lines.RemoveAt(index);
+                    }
+                    else
+                    {
+                        lines[index] = key + "=" + value;
+                    }
+                    return string.Join(Environment.NewLine, lines);
+                }
+            }
+
+            if (value != null)
+            {
+                lines.Insert(sectionEnd, key + "=" + value);
+            }
+            return string.Join(Environment.NewLine, lines);
+        }
+
+        private static string NormalizeExplorerTitle(string title)
+        {
+            return title == null ? "" : title.Replace('\r', ' ').Replace('\n', ' ').Trim();
+        }
+
+        private static string ReadDesktopIni(string path)
+        {
+            if (!File.Exists(path))
+            {
+                return string.Empty;
+            }
+
+            using (StreamReader reader = new StreamReader(path, Encoding.Unicode, true))
+            {
+                return reader.ReadToEnd().TrimStart('\uFEFF');
+            }
+        }
+
+        private static bool HasTeddyBenchExplorerTitle(string directoryPath)
+        {
+            try
+            {
+                string desktopIniPath = Path.Combine(directoryPath, DesktopIniFileName);
+                return File.Exists(desktopIniPath) &&
+                    GetDesktopIniValue(ReadDesktopIni(desktopIniPath), TeddyBenchSection, "ExplorerTitle") != null;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static void WriteDesktopIni(string directoryPath, string content)
+        {
+            string path = Path.Combine(directoryPath, DesktopIniFileName);
+            bool exists = File.Exists(path);
+            FileAttributes originalAttributes = exists ? File.GetAttributes(path) : FileAttributes.Normal;
+            DirectoryInfo directory = new DirectoryInfo(directoryPath);
+            FileAttributes originalDirectoryAttributes = directory.Attributes;
+
+            if (exists)
+            {
+                File.SetAttributes(path, originalAttributes & ~(FileAttributes.ReadOnly | FileAttributes.Hidden | FileAttributes.System));
+            }
+            directory.Attributes = originalDirectoryAttributes & ~FileAttributes.ReadOnly;
+
+            try
+            {
+                using (FileStream stream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.ReadWrite))
+                using (StreamWriter writer = new StreamWriter(stream, Encoding.Unicode))
+                {
+                    writer.Write(content);
+                }
+            }
+            finally
+            {
+                if (File.Exists(path))
+                {
+                    File.SetAttributes(path, originalAttributes | FileAttributes.Hidden | FileAttributes.System);
+                }
+                directory.Attributes = originalDirectoryAttributes | FileAttributes.ReadOnly;
+            }
+        }
+
+        private static bool TrySetExplorerTitle(string directoryPath, string title, out string error)
+        {
+            try
+            {
+                string normalizedTitle = NormalizeExplorerTitle(title);
+                if (string.IsNullOrWhiteSpace(normalizedTitle))
+                {
+                    throw new ArgumentException("The title cannot be empty.");
+                }
+
+                string desktopIniPath = Path.Combine(directoryPath, DesktopIniFileName);
+                string content = ReadDesktopIni(desktopIniPath);
+                string existingInfoTip = GetDesktopIniValue(content, ShellClassInfoSection, "InfoTip");
+                bool replaceInfoTip = string.IsNullOrWhiteSpace(existingInfoTip) ||
+                    string.Equals(GetDesktopIniValue(content, TeddyBenchSection, "ExplorerInfoTip"), "1", StringComparison.Ordinal);
+
+                content = SetDesktopIniValue(content, DocumentPropertiesSection, "Prop2", "31," + normalizedTitle);
+                content = SetDesktopIniValue(content, TeddyBenchSection, "ExplorerTitle", normalizedTitle);
+                content = SetDesktopIniValue(content, TeddyBenchSection, "ExplorerInfoTip", replaceInfoTip ? "1" : "0");
+                if (replaceInfoTip)
+                {
+                    content = SetDesktopIniValue(content, ShellClassInfoSection, "InfoTip", normalizedTitle);
+                }
+
+                WriteDesktopIni(directoryPath, content);
+                error = null;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                error = ex.Message;
+                return false;
+            }
+        }
+
+        private static bool TryRemoveExplorerTitle(string directoryPath, out string error)
+        {
+            try
+            {
+                string desktopIniPath = Path.Combine(directoryPath, DesktopIniFileName);
+                if (!File.Exists(desktopIniPath))
+                {
+                    error = null;
+                    return true;
+                }
+
+                string content = ReadDesktopIni(desktopIniPath);
+                string explorerTitle = GetDesktopIniValue(content, TeddyBenchSection, "ExplorerTitle");
+                if (explorerTitle == null)
+                {
+                    error = null;
+                    return true;
+                }
+
+                bool removeInfoTip =
+                    string.Equals(GetDesktopIniValue(content, TeddyBenchSection, "ExplorerInfoTip"), "1", StringComparison.Ordinal) &&
+                    string.Equals(GetDesktopIniValue(content, ShellClassInfoSection, "InfoTip"), explorerTitle, StringComparison.Ordinal);
+
+                content = SetDesktopIniValue(content, DocumentPropertiesSection, "Prop2", null);
+                content = SetDesktopIniValue(content, TeddyBenchSection, "ExplorerTitle", null);
+                content = SetDesktopIniValue(content, TeddyBenchSection, "ExplorerInfoTip", null);
+                if (removeInfoTip)
+                {
+                    content = SetDesktopIniValue(content, ShellClassInfoSection, "InfoTip", null);
+                }
+
+                WriteDesktopIni(directoryPath, content);
+                error = null;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                error = ex.Message;
+                return false;
+            }
+        }
+
+        private string GetExplorerTitle(ListViewTag tag)
+        {
+            if (tag == null)
+            {
+                return null;
+            }
+
+            string hash = tag.Hash;
+            if (string.IsNullOrWhiteSpace(hash))
+            {
+                try
+                {
+                    TonieAudio audio = GetTonieAudio(tag.FileName);
+                    hash = BitConverter.ToString(audio.Header.Hash).Replace("-", "");
+                    tag.Hash = hash;
+                }
+                catch
+                {
+                    return tag.Info?.Title;
+                }
+            }
+
+            string title = tag.Info?.Title;
+            lock (TonieInfoLock)
+            {
+                if (string.IsNullOrWhiteSpace(title))
+                {
+                    TonieTools.TonieData info = TonieInfo.FirstOrDefault(t => t.Hash.Contains(hash));
+                    title = info?.Title;
+                }
+
+                CustomTonieInfo customInfo;
+                if (TonieInfoCustom.TryGetValue(hash, out customInfo) && !string.IsNullOrWhiteSpace(customInfo.Title))
+                {
+                    title = customInfo.Title;
+                }
+            }
+
+            return NormalizeExplorerTitle(title);
+        }
+
         public class CustomTonieInfo
         {
             [JsonProperty("title")]
@@ -1245,13 +1526,16 @@ namespace TeddyBench
                     return;
                 }
 
+                string explorerTitle = AskForExplorerTitle();
+
                 try
                 {
                     TonieAudio dumpFile = TonieAudio.FromFile(fileNames[0]);
 
                     if (dumpFile.FileContent.Length > 0)
                     {
-                        CopyFile(copyAsk.Uid, fileNames[0]);
+                        string hash = BitConverter.ToString(dumpFile.Header.Hash).Replace("-", "");
+                        CopyFile(copyAsk.Uid, fileNames[0], explorerTitle, hash);
                     }
                 }
                 catch (Exception ex)
@@ -1279,11 +1563,28 @@ namespace TeddyBench
             AskUIDForm encodeAsk = new AskUIDForm(RfidReader);
             if (encodeAsk.ShowDialog() == DialogResult.OK)
             {
-                EncodeFile(encodeAsk.Uid, sorter.SortedFiles, id);
+                EncodeFile(encodeAsk.Uid, sorter.SortedFiles, id, AskForExplorerTitle());
             }
         }
 
-        private void CopyFile(string uid, string fileName)
+        private string AskForExplorerTitle()
+        {
+            if (MessageBox.Show(
+                "Add title information for Windows Explorer?",
+                "Explorer title",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question) != DialogResult.Yes)
+            {
+                return null;
+            }
+
+            using (ExplorerTitleDialog dialog = new ExplorerTitleDialog())
+            {
+                return dialog.ShowDialog(this) == DialogResult.OK ? dialog.ExplorerTitle : null;
+            }
+        }
+
+        private void CopyFile(string uid, string fileName, string explorerTitle = null, string hash = null)
         {
             btnAdd.Enabled = false;
             btnDelete.Enabled = false;
@@ -1307,6 +1608,23 @@ namespace TeddyBench
                 try
                 {
                     File.WriteAllBytes(newFile, File.ReadAllBytes(fileName));
+                    if (!string.IsNullOrWhiteSpace(explorerTitle))
+                    {
+                        string explorerTitleError;
+                        if (!TrySetExplorerTitle(newDir, explorerTitle, out explorerTitleError))
+                        {
+                            MessageBox.Show("The Tonie was created, but its Explorer title could not be saved: " + explorerTitleError);
+                        }
+
+                        if (!string.IsNullOrWhiteSpace(hash))
+                        {
+                            lock (TonieInfoLock)
+                            {
+                                GetOrCreateCustomTonieInfo(hash).Title = NormalizeExplorerTitle(explorerTitle);
+                            }
+                            SaveJson();
+                        }
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -1374,7 +1692,7 @@ namespace TeddyBench
             }
         }
 
-        private void EncodeFile(string uid, string[] filenames, uint id = uint.MaxValue)
+        private void EncodeFile(string uid, string[] filenames, uint id = uint.MaxValue, string explorerTitle = null)
         {
             btnAdd.Enabled = false;
             btnDelete.Enabled = false;
@@ -1417,10 +1735,23 @@ namespace TeddyBench
                 try
                 {
                     File.WriteAllBytes(newFile, audio.FileContent);
+                    if (!string.IsNullOrWhiteSpace(explorerTitle))
+                    {
+                        string explorerTitleError;
+                        if (!TrySetExplorerTitle(newDir, explorerTitle, out explorerTitleError))
+                        {
+                            MessageBox.Show("The Tonie was created, but its Explorer title could not be saved: " + explorerTitleError);
+                        }
+                    }
                     string hash = BitConverter.ToString(audio.Header.Hash).Replace("-", "");
                     lock (TonieInfoLock)
                     {
-                        GetOrCreateCustomTonieInfo(hash).Chapters = callback.ChapterTitles.ToArray();
+                        CustomTonieInfo customInfo = GetOrCreateCustomTonieInfo(hash);
+                        customInfo.Chapters = callback.ChapterTitles.ToArray();
+                        if (!string.IsNullOrWhiteSpace(explorerTitle))
+                        {
+                            customInfo.Title = NormalizeExplorerTitle(explorerTitle);
+                        }
                     }
                     SaveJson();
                 }
@@ -1723,6 +2054,21 @@ namespace TeddyBench
             }
 
             SaveJson();
+
+            string directoryPath = tag.FileInfo.Directory.FullName;
+            if (!HasTeddyBenchExplorerTitle(directoryPath))
+            {
+                return;
+            }
+
+            string error;
+            bool updated = string.IsNullOrWhiteSpace(e.Label)
+                ? TryRemoveExplorerTitle(directoryPath, out error)
+                : TrySetExplorerTitle(directoryPath, e.Label, out error);
+            if (!updated)
+            {
+                MessageBox.Show("The Tonie name was saved, but its Explorer title could not be updated: " + error, "Explorer title");
+            }
         }
 
         #endregion
@@ -2071,6 +2417,43 @@ namespace TeddyBench
             RefreshCardContent();
         }
 
+        private void addExplorerTitleToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            ListViewTag tag = LastSelectediItem?.Tag as ListViewTag;
+            if (tag == null)
+            {
+                return;
+            }
+
+            string title = GetExplorerTitle(tag);
+            if (string.IsNullOrWhiteSpace(title))
+            {
+                MessageBox.Show("No story title is available for this Tonie.", "Explorer title");
+                return;
+            }
+
+            string error;
+            if (!TrySetExplorerTitle(tag.FileInfo.Directory.FullName, title, out error))
+            {
+                MessageBox.Show("Could not save the Explorer title: " + error, "Explorer title");
+            }
+        }
+
+        private void removeExplorerTitleToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            ListViewTag tag = LastSelectediItem?.Tag as ListViewTag;
+            if (tag == null)
+            {
+                return;
+            }
+
+            string error;
+            if (!TryRemoveExplorerTitle(tag.FileInfo.Directory.FullName, out error))
+            {
+                MessageBox.Show("Could not remove the Explorer title: " + error, "Explorer title");
+            }
+        }
+
         private void btnSetAllLiveFlags_Click(object sender, EventArgs e)
         {
             SetAllLiveFlags(true);
@@ -2079,6 +2462,75 @@ namespace TeddyBench
         private void btnRemoveAllLiveFlags_Click(object sender, EventArgs e)
         {
             SetAllLiveFlags(false);
+        }
+
+        private void btnAddAllExplorerTitles_Click(object sender, EventArgs e)
+        {
+            SetAllExplorerTitles(true);
+        }
+
+        private void btnRemoveAllExplorerTitles_Click(object sender, EventArgs e)
+        {
+            SetAllExplorerTitles(false);
+        }
+
+        private void SetAllExplorerTitles(bool addTitles)
+        {
+            int updated = 0;
+            int skipped = 0;
+            int failed = 0;
+            var processedDirectories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (ListViewItem item in lstTonies.Items)
+            {
+                ListViewTag tag = item.Tag as ListViewTag;
+                string directoryPath = tag?.FileInfo?.DirectoryName;
+                if (tag == null || string.IsNullOrWhiteSpace(directoryPath) || !processedDirectories.Add(directoryPath))
+                {
+                    continue;
+                }
+
+                string error;
+                if (addTitles)
+                {
+                    string title = GetExplorerTitle(tag);
+                    if (string.IsNullOrWhiteSpace(title))
+                    {
+                        skipped++;
+                        continue;
+                    }
+
+                    if (TrySetExplorerTitle(directoryPath, title, out error))
+                    {
+                        updated++;
+                    }
+                    else
+                    {
+                        failed++;
+                    }
+                }
+                else if (TryRemoveExplorerTitle(directoryPath, out error))
+                {
+                    updated++;
+                }
+                else
+                {
+                    failed++;
+                }
+            }
+
+            string action = addTitles ? "added" : "removed";
+            string summary = updated + " Explorer title" + (updated == 1 ? " was" : "s were") + " " + action + ".";
+            if (skipped > 0)
+            {
+                summary += Environment.NewLine + skipped + " Tonie" + (skipped == 1 ? " was" : "s were") + " skipped because no title is available.";
+            }
+            if (failed > 0)
+            {
+                summary += Environment.NewLine + failed + " Tonie" + (failed == 1 ? " could" : "s could") + " not be updated.";
+            }
+
+            MessageBox.Show(summary, "Explorer titles");
         }
 
         private void SetAllLiveFlags(bool isLive)

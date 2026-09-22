@@ -75,6 +75,8 @@
             this.btnAdd = new System.Windows.Forms.Button();
             this.btnSetAllLiveFlags = new System.Windows.Forms.Button();
             this.btnRemoveAllLiveFlags = new System.Windows.Forms.Button();
+            this.btnAddAllExplorerTitles = new System.Windows.Forms.Button();
+            this.btnRemoveAllExplorerTitles = new System.Windows.Forms.Button();
             this.lblMessage = new System.Windows.Forms.Label();
             this.statusStrip1 = new System.Windows.Forms.StatusStrip();
             this.statusLabel = new System.Windows.Forms.ToolStripStatusLabel();
@@ -87,6 +89,8 @@
             this.setCustomImageToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.resetCustomImageToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.changeChapterInformationToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.addExplorerTitleToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.removeExplorerTitleToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.toolStripMenuItem2 = new System.Windows.Forms.ToolStripSeparator();
             this.showInExplorerToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.exportTooggToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
@@ -340,6 +344,8 @@
             //
             this.splitContainer1.Panel2.Controls.Add(this.btnRemoveAllLiveFlags);
             this.splitContainer1.Panel2.Controls.Add(this.btnSetAllLiveFlags);
+            this.splitContainer1.Panel2.Controls.Add(this.btnRemoveAllExplorerTitles);
+            this.splitContainer1.Panel2.Controls.Add(this.btnAddAllExplorerTitles);
             this.splitContainer1.Panel2.Controls.Add(this.btnSave);
             this.splitContainer1.Panel2.Controls.Add(this.btnDelete);
             this.splitContainer1.Panel2.Controls.Add(this.btnAdd);
@@ -526,6 +532,26 @@
             this.btnRemoveAllLiveFlags.UseVisualStyleBackColor = true;
             this.btnRemoveAllLiveFlags.Click += new System.EventHandler(this.btnRemoveAllLiveFlags_Click);
             //
+            // btnAddAllExplorerTitles
+            //
+            this.btnAddAllExplorerTitles.Location = new System.Drawing.Point(4, 193);
+            this.btnAddAllExplorerTitles.Name = "btnAddAllExplorerTitles";
+            this.btnAddAllExplorerTitles.Size = new System.Drawing.Size(80, 38);
+            this.btnAddAllExplorerTitles.TabIndex = 4;
+            this.btnAddAllExplorerTitles.Text = "Add all\r\nExplorer titles";
+            this.btnAddAllExplorerTitles.UseVisualStyleBackColor = true;
+            this.btnAddAllExplorerTitles.Click += new System.EventHandler(this.btnAddAllExplorerTitles_Click);
+            //
+            // btnRemoveAllExplorerTitles
+            //
+            this.btnRemoveAllExplorerTitles.Location = new System.Drawing.Point(4, 237);
+            this.btnRemoveAllExplorerTitles.Name = "btnRemoveAllExplorerTitles";
+            this.btnRemoveAllExplorerTitles.Size = new System.Drawing.Size(80, 38);
+            this.btnRemoveAllExplorerTitles.TabIndex = 5;
+            this.btnRemoveAllExplorerTitles.Text = "Remove all\r\nExplorer titles";
+            this.btnRemoveAllExplorerTitles.UseVisualStyleBackColor = true;
+            this.btnRemoveAllExplorerTitles.Click += new System.EventHandler(this.btnRemoveAllExplorerTitles_Click);
+            //
             // lblMessage
             // 
             this.lblMessage.AutoSize = true;
@@ -575,13 +601,15 @@
             this.setCustomImageToolStripMenuItem,
             this.resetCustomImageToolStripMenuItem,
             this.changeChapterInformationToolStripMenuItem,
+            this.addExplorerTitleToolStripMenuItem,
+            this.removeExplorerTitleToolStripMenuItem,
             this.toolStripMenuItem2,
             this.showInExplorerToolStripMenuItem,
             this.exportTooggToolStripMenuItem,
             this.exportToToolStripMenuItem,
             this.sendDiagnosticsReportToolStripMenuItem});
             this.TonieContextMenu.Name = "contextMenuStrip1";
-            this.TonieContextMenu.Size = new System.Drawing.Size(199, 230);
+            this.TonieContextMenu.Size = new System.Drawing.Size(273, 274);
             // 
             // toggleLiveFlagToolStripMenuItem
             // 
@@ -632,6 +660,20 @@
             this.changeChapterInformationToolStripMenuItem.Size = new System.Drawing.Size(198, 22);
             this.changeChapterInformationToolStripMenuItem.Text = "Change chapter information";
             this.changeChapterInformationToolStripMenuItem.Click += new System.EventHandler(this.changeChapterInformationToolStripMenuItem_Click);
+            //
+            // addExplorerTitleToolStripMenuItem
+            //
+            this.addExplorerTitleToolStripMenuItem.Name = "addExplorerTitleToolStripMenuItem";
+            this.addExplorerTitleToolStripMenuItem.Size = new System.Drawing.Size(272, 22);
+            this.addExplorerTitleToolStripMenuItem.Text = "Add title information for Explorer";
+            this.addExplorerTitleToolStripMenuItem.Click += new System.EventHandler(this.addExplorerTitleToolStripMenuItem_Click);
+            //
+            // removeExplorerTitleToolStripMenuItem
+            //
+            this.removeExplorerTitleToolStripMenuItem.Name = "removeExplorerTitleToolStripMenuItem";
+            this.removeExplorerTitleToolStripMenuItem.Size = new System.Drawing.Size(272, 22);
+            this.removeExplorerTitleToolStripMenuItem.Text = "Remove title information for Explorer";
+            this.removeExplorerTitleToolStripMenuItem.Click += new System.EventHandler(this.removeExplorerTitleToolStripMenuItem_Click);
             //
             // toolStripMenuItem2
             //
@@ -761,6 +803,10 @@
         private System.Windows.Forms.ToolStripMenuItem downloadToniesjsonNowToolStripMenuItem;
         private System.Windows.Forms.Button btnSetAllLiveFlags;
         private System.Windows.Forms.Button btnRemoveAllLiveFlags;
+        private System.Windows.Forms.Button btnAddAllExplorerTitles;
+        private System.Windows.Forms.Button btnRemoveAllExplorerTitles;
+        private System.Windows.Forms.ToolStripMenuItem addExplorerTitleToolStripMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem removeExplorerTitleToolStripMenuItem;
     }
 }
 
