@@ -1,4 +1,4 @@
-﻿namespace TeddyBench
+namespace TeddyBench
 {
     partial class TeddyMain
     {
@@ -809,4 +809,3 @@
         private System.Windows.Forms.ToolStripMenuItem removeExplorerTitleToolStripMenuItem;
     }
 }
-
