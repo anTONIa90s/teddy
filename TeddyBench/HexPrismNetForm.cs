@@ -1,7 +1,6 @@
 using System;
 using System.Drawing;
 using System.Drawing.Drawing2D;
-using System.Drawing.Imaging;
 using System.Drawing.Printing;
 using System.Globalization;
 using System.Collections.Generic;
@@ -9,6 +8,7 @@ using System.IO;
 using System.Runtime.Serialization;
 using System.Runtime.Serialization.Json;
 using System.Windows.Forms;
+using Ph0rd.ColorSampler;
 
 namespace TeddyBench
 {
@@ -96,6 +96,7 @@ namespace TeddyBench
         private bool loadingLayout;
         private int activeDesignIndex;
         private readonly List<HexagonDesign> designs = new List<HexagonDesign>();
+        private Sampler activeColorSampler;
 
         public HexPrismNetForm()
         {
@@ -680,12 +681,12 @@ namespace TeddyBench
             pnlFaceBackgroundColor.BackColor = faceBackgroundColor;
             hexagonImage = design.HexagonImage;
             numHexagonImageScale.Value = design.HexagonImageScale;
-            lblImageName.Text = hexagonImage == null ? "PNG, JPEG, BMP, or GIF" : "Image selected";
+            lblImageName.Text = GetImageDisplayName(design.HexagonImagePath, hexagonImage, "PNG, JPEG, BMP, or GIF");
             btnRemoveImage.Enabled = hexagonImage != null;
             faceImage = design.FaceImage;
             numFaceImageScale.Value = design.FaceImageScale;
             chkFaceImageFlip.Checked = design.FaceImageFlip;
-            lblFaceImageName.Text = faceImage == null ? "Repeated and rotated on all six faces" : "Image selected";
+            lblFaceImageName.Text = GetImageDisplayName(design.FaceImagePath, faceImage, "Repeated and rotated on all six faces");
             btnRemoveFaceImage.Enabled = faceImage != null;
             txtFaceText.Text = design.FaceText;
             SelectComboItem(cmbFaceTextFont, design.FaceTextFontName);
@@ -790,16 +791,12 @@ namespace TeddyBench
 
         private void btnLineColor_Click(object sender, EventArgs e)
         {
-            using (ColorDialog dialog = new ColorDialog())
+            ShowColorPickerMenu((Control)sender, lineColor, delegate(Color selectedColor)
             {
-                dialog.Color = lineColor;
-                if (dialog.ShowDialog(this) == DialogResult.OK)
-                {
-                    lineColor = dialog.Color;
-                    pnlLineColor.BackColor = lineColor;
-                    lineStyleChanged(sender, e);
-                }
-            }
+                lineColor = selectedColor;
+                pnlLineColor.BackColor = lineColor;
+                lineStyleChanged(sender, e);
+            });
         }
 
         private void lineStyleChanged(object sender, EventArgs e)
@@ -815,35 +812,31 @@ namespace TeddyBench
             bool isHeader = sender == btnHeaderTextColor;
             bool isFaceText = sender == btnFaceTextColor;
             Color currentColor = isHeader ? headerTextColor : (isFaceText ? pnlFaceTextColor.BackColor : subtextTextColor);
-            using (ColorDialog dialog = new ColorDialog())
+            ShowColorPickerMenu((Control)sender, currentColor, delegate(Color selectedColor)
             {
-                dialog.Color = currentColor;
-                if (dialog.ShowDialog(this) == DialogResult.OK)
+                if (isHeader)
                 {
-                    if (isHeader)
-                    {
-                        headerTextColor = dialog.Color;
-                        pnlHeaderTextColor.BackColor = headerTextColor;
-                    }
-                    else if (isFaceText)
-                    {
-                        pnlFaceTextColor.BackColor = dialog.Color;
-                    }
-                    else
-                    {
-                        subtextTextColor = dialog.Color;
-                        pnlSubtextTextColor.BackColor = subtextTextColor;
-                    }
-                    if (isFaceText)
-                    {
-                        faceTextAppearanceChanged(sender, e);
-                    }
-                    else
-                    {
-                        textAppearanceChanged(sender, e);
-                    }
+                    headerTextColor = selectedColor;
+                    pnlHeaderTextColor.BackColor = headerTextColor;
                 }
-            }
+                else if (isFaceText)
+                {
+                    pnlFaceTextColor.BackColor = selectedColor;
+                }
+                else
+                {
+                    subtextTextColor = selectedColor;
+                    pnlSubtextTextColor.BackColor = subtextTextColor;
+                }
+                if (isFaceText)
+                {
+                    faceTextAppearanceChanged(sender, e);
+                }
+                else
+                {
+                    textAppearanceChanged(sender, e);
+                }
+            });
         }
 
         private void btnAddImage_Click(object sender, EventArgs e)
@@ -857,9 +850,10 @@ namespace TeddyBench
 
             DisposeImage(ref hexagonImage);
             hexagonImage = loadedImage;
+            designs[activeDesignIndex].HexagonImagePath = fileName;
             designs[activeDesignIndex].HexagonImageOffsetX = 0;
             designs[activeDesignIndex].HexagonImageOffsetY = 0;
-            lblImageName.Text = fileName;
+            lblImageName.Text = Path.GetFileName(fileName);
             btnRemoveImage.Enabled = true;
             imageAppearanceChanged(sender, e);
         }
@@ -875,9 +869,10 @@ namespace TeddyBench
 
             DisposeImage(ref faceImage);
             faceImage = loadedImage;
+            designs[activeDesignIndex].FaceImagePath = fileName;
             designs[activeDesignIndex].FaceImageOffsetX = 0;
             designs[activeDesignIndex].FaceImageOffsetY = 0;
-            lblFaceImageName.Text = fileName;
+            lblFaceImageName.Text = Path.GetFileName(fileName);
             btnRemoveFaceImage.Enabled = true;
             imageAppearanceChanged(sender, e);
         }
@@ -885,6 +880,7 @@ namespace TeddyBench
         private void btnRemoveImage_Click(object sender, EventArgs e)
         {
             DisposeImage(ref hexagonImage);
+            designs[activeDesignIndex].HexagonImagePath = null;
             designs[activeDesignIndex].HexagonImageOffsetX = 0;
             designs[activeDesignIndex].HexagonImageOffsetY = 0;
             lblImageName.Text = "PNG, JPEG, BMP, or GIF";
@@ -895,6 +891,7 @@ namespace TeddyBench
         private void btnRemoveFaceImage_Click(object sender, EventArgs e)
         {
             DisposeImage(ref faceImage);
+            designs[activeDesignIndex].FaceImagePath = null;
             designs[activeDesignIndex].FaceImageOffsetX = 0;
             designs[activeDesignIndex].FaceImageOffsetY = 0;
             lblFaceImageName.Text = "Repeated and rotated on all six faces";
@@ -921,7 +918,7 @@ namespace TeddyBench
                     {
                         image = (Image)source.Clone();
                     }
-                    fileName = System.IO.Path.GetFileName(dialog.FileName);
+                    fileName = System.IO.Path.GetFullPath(dialog.FileName);
                     return true;
                 }
                 catch (Exception exception)
@@ -981,24 +978,119 @@ namespace TeddyBench
         private void btnBackgroundColor_Click(object sender, EventArgs e)
         {
             bool isHexagon = sender == btnHexagonBackgroundColor;
+            Color currentColor = isHexagon ? hexagonBackgroundColor : faceBackgroundColor;
+            ShowColorPickerMenu((Control)sender, currentColor, delegate(Color selectedColor)
+            {
+                if (isHexagon)
+                {
+                    hexagonBackgroundColor = selectedColor;
+                    pnlHexagonBackgroundColor.BackColor = hexagonBackgroundColor;
+                }
+                else
+                {
+                    faceBackgroundColor = selectedColor;
+                    pnlFaceBackgroundColor.BackColor = faceBackgroundColor;
+                }
+                imageAppearanceChanged(sender, e);
+            });
+        }
+
+        private void ShowColorPickerMenu(Control source, Color currentColor, Action<Color> colorSelected)
+        {
+            ContextMenuStrip menu = new ContextMenuStrip();
+            ToolStripMenuItem chooseColorItem = new ToolStripMenuItem("Choose color...");
+            ToolStripMenuItem pickFromScreenItem = new ToolStripMenuItem("Pick from screen...");
+
+            chooseColorItem.Click += delegate
+            {
+                Color selectedColor;
+                if (TrySelectColorFromDialog(currentColor, out selectedColor))
+                {
+                    colorSelected(selectedColor);
+                }
+            };
+            pickFromScreenItem.Click += delegate { StartScreenColorSampler(colorSelected); };
+            menu.Items.Add(chooseColorItem);
+            menu.Items.Add(pickFromScreenItem);
+            menu.Closed += delegate
+            {
+                BeginInvoke(new Action(menu.Dispose));
+            };
+            menu.Show(source, new Point(0, source.Height));
+        }
+
+        private bool TrySelectColorFromDialog(Color currentColor, out Color selectedColor)
+        {
+            selectedColor = currentColor;
             using (ColorDialog dialog = new ColorDialog())
             {
-                dialog.Color = isHexagon ? hexagonBackgroundColor : faceBackgroundColor;
-                if (dialog.ShowDialog(this) == DialogResult.OK)
+                dialog.Color = currentColor;
+                dialog.FullOpen = true;
+                if (dialog.ShowDialog(this) != DialogResult.OK)
                 {
-                    if (isHexagon)
-                    {
-                        hexagonBackgroundColor = dialog.Color;
-                        pnlHexagonBackgroundColor.BackColor = hexagonBackgroundColor;
-                    }
-                    else
-                    {
-                        faceBackgroundColor = dialog.Color;
-                        pnlFaceBackgroundColor.BackColor = faceBackgroundColor;
-                    }
-                    imageAppearanceChanged(sender, e);
+                    return false;
                 }
+
+                selectedColor = dialog.Color;
+                return true;
             }
+        }
+
+        private void StartScreenColorSampler(Action<Color> colorSelected)
+        {
+            if (activeColorSampler != null)
+            {
+                return;
+            }
+
+            Sampler sampler = new Sampler();
+            activeColorSampler = sampler;
+            sampler.SamplerEvent += delegate(object sender, SamplerEventArgs e)
+            {
+                if (e.Kind == SamplerEventKind.Confirmed)
+                {
+                    CompleteScreenColorSampling(sampler, e.Color, colorSelected);
+                }
+                else if (e.Kind == SamplerEventKind.Cancelled)
+                {
+                    CompleteScreenColorSampling(sampler, null, null);
+                }
+            };
+
+            try
+            {
+                sampler.Start();
+            }
+            catch (Exception exception)
+            {
+                sampler.Dispose();
+                activeColorSampler = null;
+                MessageBox.Show(this, "The screen color picker could not be started.\r\n\r\n" + exception.Message, "Unable to pick color", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+        }
+
+        private void CompleteScreenColorSampling(Sampler sampler, Color? selectedColor, Action<Color> colorSelected)
+        {
+            if (IsDisposed || Disposing)
+            {
+                sampler.Dispose();
+                return;
+            }
+
+            BeginInvoke(new Action(delegate
+            {
+                if (activeColorSampler != sampler)
+                {
+                    return;
+                }
+
+                activeColorSampler = null;
+                sampler.Dispose();
+                if (selectedColor.HasValue && colorSelected != null)
+                {
+                    colorSelected(selectedColor.Value);
+                }
+            }));
         }
 
         private void btnSaveLayout_Click(object sender, EventArgs e)
@@ -1054,9 +1146,10 @@ namespace TeddyBench
                     }
 
                     loadedDesigns = new List<HexagonDesign>();
+                    string layoutDirectory = Path.GetDirectoryName(dialog.FileName);
                     foreach (NetDesignFile savedDesign in layout.Designs)
                     {
-                        loadedDesigns.Add(CreateDesignFromFile(savedDesign));
+                        loadedDesigns.Add(CreateDesignFromFile(savedDesign, layoutDirectory));
                     }
                     ApplyLayoutFile(layout, loadedDesigns);
                     loadedDesigns = null;
@@ -1111,11 +1204,11 @@ namespace TeddyBench
                 SubtextColorArgb = design.SubtextColor.ToArgb(),
                 HexagonBackgroundColorArgb = design.HexagonBackgroundColor.ToArgb(),
                 FaceBackgroundColorArgb = design.FaceBackgroundColor.ToArgb(),
-                HexagonImage = ImageToBase64(design.HexagonImage),
+                HexagonImagePath = design.HexagonImagePath,
                 HexagonImageScale = design.HexagonImageScale,
                 HexagonImageOffsetX = design.HexagonImageOffsetX,
                 HexagonImageOffsetY = design.HexagonImageOffsetY,
-                FaceImage = ImageToBase64(design.FaceImage),
+                FaceImagePath = design.FaceImagePath,
                 FaceImageScale = design.FaceImageScale,
                 FaceImageOffsetX = design.FaceImageOffsetX,
                 FaceImageOffsetY = design.FaceImageOffsetY,
@@ -1190,36 +1283,38 @@ namespace TeddyBench
             }
         }
 
-        private static string ImageToBase64(Image image)
+        private static Image LoadLayoutImage(string imagePath, string layoutDirectory)
+        {
+            if (String.IsNullOrWhiteSpace(imagePath))
+            {
+                return null;
+            }
+
+            string resolvedPath = Path.IsPathRooted(imagePath)
+                ? imagePath
+                : Path.Combine(layoutDirectory ?? Environment.CurrentDirectory, imagePath);
+            if (!File.Exists(resolvedPath))
+            {
+                throw new FileNotFoundException("The image referenced by this layout could not be found: " + imagePath, resolvedPath);
+            }
+
+            using (Image source = Image.FromFile(resolvedPath))
+            {
+                return (Image)source.Clone();
+            }
+        }
+
+        private static string GetImageDisplayName(string imagePath, Image image, string emptyText)
         {
             if (image == null)
             {
-                return null;
+                return emptyText;
             }
 
-            using (MemoryStream stream = new MemoryStream())
-            {
-                image.Save(stream, ImageFormat.Png);
-                return Convert.ToBase64String(stream.ToArray());
-            }
+            return String.IsNullOrEmpty(imagePath) ? "Image selected" : Path.GetFileName(imagePath);
         }
 
-        private static Image ImageFromBase64(string imageData)
-        {
-            if (String.IsNullOrEmpty(imageData))
-            {
-                return null;
-            }
-
-            byte[] bytes = Convert.FromBase64String(imageData);
-            using (MemoryStream stream = new MemoryStream(bytes))
-            using (Image source = Image.FromStream(stream))
-            {
-                return new Bitmap(source);
-            }
-        }
-
-        private static HexagonDesign CreateDesignFromFile(NetDesignFile savedDesign)
+        private static HexagonDesign CreateDesignFromFile(NetDesignFile savedDesign, string layoutDirectory)
         {
             if (savedDesign == null)
             {
@@ -1238,11 +1333,13 @@ namespace TeddyBench
                 SubtextColor = Color.FromArgb(savedDesign.SubtextColorArgb),
                 HexagonBackgroundColor = Color.FromArgb(savedDesign.HexagonBackgroundColorArgb),
                 FaceBackgroundColor = Color.FromArgb(savedDesign.FaceBackgroundColorArgb),
-                HexagonImage = ImageFromBase64(savedDesign.HexagonImage),
+                HexagonImage = LoadLayoutImage(savedDesign.HexagonImagePath, layoutDirectory),
+                HexagonImagePath = savedDesign.HexagonImagePath,
                 HexagonImageScale = savedDesign.HexagonImageScale,
                 HexagonImageOffsetX = savedDesign.HexagonImageOffsetX,
                 HexagonImageOffsetY = savedDesign.HexagonImageOffsetY,
-                FaceImage = ImageFromBase64(savedDesign.FaceImage),
+                FaceImage = LoadLayoutImage(savedDesign.FaceImagePath, layoutDirectory),
+                FaceImagePath = savedDesign.FaceImagePath,
                 FaceImageScale = savedDesign.FaceImageScale,
                 FaceImageOffsetX = savedDesign.FaceImageOffsetX,
                 FaceImageOffsetY = savedDesign.FaceImageOffsetY,
@@ -1824,11 +1921,11 @@ namespace TeddyBench
             [DataMember] public int SubtextColorArgb { get; set; }
             [DataMember] public int HexagonBackgroundColorArgb { get; set; }
             [DataMember] public int FaceBackgroundColorArgb { get; set; }
-            [DataMember] public string HexagonImage { get; set; }
+            [DataMember(EmitDefaultValue = false)] public string HexagonImagePath { get; set; }
             [DataMember] public decimal HexagonImageScale { get; set; }
             [DataMember] public decimal HexagonImageOffsetX { get; set; }
             [DataMember] public decimal HexagonImageOffsetY { get; set; }
-            [DataMember] public string FaceImage { get; set; }
+            [DataMember(EmitDefaultValue = false)] public string FaceImagePath { get; set; }
             [DataMember] public decimal FaceImageScale { get; set; }
             [DataMember] public decimal FaceImageOffsetX { get; set; }
             [DataMember] public decimal FaceImageOffsetY { get; set; }
@@ -1856,10 +1953,12 @@ namespace TeddyBench
             public Color HexagonBackgroundColor;
             public Color FaceBackgroundColor;
             public Image HexagonImage;
+            public string HexagonImagePath;
             public decimal HexagonImageScale;
             public decimal HexagonImageOffsetX;
             public decimal HexagonImageOffsetY;
             public Image FaceImage;
+            public string FaceImagePath;
             public decimal FaceImageScale;
             public decimal FaceImageOffsetX;
             public decimal FaceImageOffsetY;
@@ -1888,10 +1987,12 @@ namespace TeddyBench
                     HexagonBackgroundColor = HexagonBackgroundColor,
                     FaceBackgroundColor = FaceBackgroundColor,
                     HexagonImage = HexagonImage == null ? null : (Image)HexagonImage.Clone(),
+                    HexagonImagePath = HexagonImagePath,
                     HexagonImageScale = HexagonImageScale,
                     HexagonImageOffsetX = HexagonImageOffsetX,
                     HexagonImageOffsetY = HexagonImageOffsetY,
                     FaceImage = FaceImage == null ? null : (Image)FaceImage.Clone(),
+                    FaceImagePath = FaceImagePath,
                     FaceImageScale = FaceImageScale,
                     FaceImageOffsetX = FaceImageOffsetX,
                     FaceImageOffsetY = FaceImageOffsetY,
@@ -1913,11 +2014,13 @@ namespace TeddyBench
                 {
                     HexagonImage.Dispose();
                     HexagonImage = null;
+                    HexagonImagePath = null;
                 }
                 if (FaceImage != null)
                 {
                     FaceImage.Dispose();
                     FaceImage = null;
+                    FaceImagePath = null;
                 }
             }
         }
