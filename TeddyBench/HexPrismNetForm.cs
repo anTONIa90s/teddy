@@ -1,0 +1,2243 @@
+using System;
+using System.Drawing;
+using System.Drawing.Drawing2D;
+using System.Drawing.Imaging;
+using System.Drawing.Printing;
+using System.Globalization;
+using System.Collections.Generic;
+using System.IO;
+using System.Runtime.Serialization;
+using System.Runtime.Serialization.Json;
+using System.Windows.Forms;
+
+namespace TeddyBench
+{
+    /// <summary>
+    /// Creates a first-draft, one-piece net for a regular hexagonal prism.
+    /// The second hexagonal end is deliberately omitted for now.
+    /// </summary>
+    public class HexPrismNetForm : Form
+    {
+        private const float Sqrt3 = 1.7320508075688772f;
+        private const float A4PortraitWidthMm = 210f;
+        private const float A4PortraitHeightMm = 297f;
+        private const int A4MarginHundredthsInch = 20;
+        private const float MillimetresPerHundredthInch = 0.254f;
+
+        private readonly RadioButton radSideLength;
+        private readonly RadioButton radVertexDiameter;
+        private readonly RadioButton radEdgeDiameter;
+        private readonly TextBox txtHexValue;
+        private readonly TextBox txtFaceHeight;
+        private readonly TextBox txtFaceTolerance;
+        private readonly Label lblTolerance;
+        private readonly CheckBox chkConnectFaces;
+        private readonly NumericUpDown numHexagonCount;
+        private readonly TabControl designTabs;
+        private readonly Button btnLineColor;
+        private readonly Panel pnlLineColor;
+        private readonly NumericUpDown numLineThickness;
+        private readonly RadioButton radStandsOnVertex;
+        private readonly RadioButton radStandsOnEdge;
+        private readonly TextBox txtHeader;
+        private readonly ComboBox cmbHeaderFont;
+        private readonly ComboBox cmbHeaderFontSize;
+        private readonly Button btnHeaderTextColor;
+        private readonly Panel pnlHeaderTextColor;
+        private readonly TextBox txtSubtext;
+        private readonly ComboBox cmbSubtextFont;
+        private readonly ComboBox cmbSubtextFontSize;
+        private readonly Button btnSubtextTextColor;
+        private readonly Panel pnlSubtextTextColor;
+        private readonly Button btnAddImage;
+        private readonly Button btnRemoveImage;
+        private readonly Label lblImageName;
+        private readonly NumericUpDown numHexagonImageScale;
+        private readonly Button btnAddFaceImage;
+        private readonly Button btnRemoveFaceImage;
+        private readonly Label lblFaceImageName;
+        private readonly NumericUpDown numFaceImageScale;
+        private readonly CheckBox chkFaceImageFlip;
+        private readonly TextBox txtFaceText;
+        private readonly ComboBox cmbFaceTextFont;
+        private readonly ComboBox cmbFaceTextFontSize;
+        private readonly Button btnFaceTextColor;
+        private readonly Panel pnlFaceTextColor;
+        private readonly ComboBox cmbFaceTextAlignment;
+        private readonly RadioButton radFaceTextRepeat;
+        private readonly RadioButton radFaceTextWrapAround;
+        private readonly RadioButton radFaceTextLinePerFace;
+        private readonly ComboBox cmbFaceTextStartAt;
+        private readonly Button btnHexagonBackgroundColor;
+        private readonly Panel pnlHexagonBackgroundColor;
+        private readonly Button btnFaceBackgroundColor;
+        private readonly Panel pnlFaceBackgroundColor;
+        private readonly Label lblConversions;
+        private readonly Button btnCreate;
+        private readonly Button btnPrint;
+        private readonly Button btnLoadLayout;
+        private readonly Button btnSaveLayout;
+        private readonly NetPreviewPanel preview;
+        private readonly PrintDocument printDocument;
+
+        private float sideLengthMm = 25;
+        private float lateralFaceHeightMm = 15;
+        private float faceToleranceMm;
+        private Color lineColor = Color.Gray;
+        private Color headerTextColor = Color.Black;
+        private Color subtextTextColor = Color.Black;
+        private Color hexagonBackgroundColor = Color.White;
+        private Color faceBackgroundColor = Color.White;
+        private Image hexagonImage;
+        private Image faceImage;
+        private bool hasNet;
+        private bool a4Landscape;
+        private bool loadingDesign;
+        private bool loadingLayout;
+        private int activeDesignIndex;
+        private readonly List<HexagonDesign> designs = new List<HexagonDesign>();
+
+        public HexPrismNetForm()
+        {
+            Text = "Hexagonal prism net";
+            StartPosition = FormStartPosition.CenterParent;
+            MinimumSize = new Size(780, 690);
+            Size = new Size(920, 740);
+
+            Panel settingsPanel = new Panel
+            {
+                Dock = DockStyle.Left,
+                Padding = new Padding(14),
+                Width = 275,
+                AutoScroll = true
+            };
+
+            Label instructions = new Label
+            {
+                AutoSize = false,
+                Dock = DockStyle.Top,
+                Height = 50,
+                Text = "Enter one hexagon measurement and the height of each lateral face. All dimensions are in millimetres. The net is printed at true size on A4."
+            };
+
+            GroupBox hexGroup = new GroupBox
+            {
+                Dock = DockStyle.Top,
+                Height = 155,
+                Text = "Hexagon measurement"
+            };
+            radSideLength = new RadioButton { AutoSize = true, Location = new Point(12, 23), Text = "Side length", Checked = true };
+            radVertexDiameter = new RadioButton { AutoSize = true, Location = new Point(12, 48), Text = "Diameter, vertex to vertex" };
+            radEdgeDiameter = new RadioButton { AutoSize = true, Location = new Point(12, 73), Text = "Diameter, edge to edge" };
+            Label valueLabel = new Label { AutoSize = true, Location = new Point(12, 106), Text = "Value (mm):" };
+            txtHexValue = new TextBox { Location = new Point(103, 102), Size = new Size(115, 20), Text = Format(sideLengthMm), TextAlign = HorizontalAlignment.Right };
+            hexGroup.Controls.AddRange(new Control[] { radSideLength, radVertexDiameter, radEdgeDiameter, valueLabel, txtHexValue });
+
+            designTabs = new TabControl { Dock = DockStyle.Top, Height = 30 };
+
+            GroupBox faceGroup = new GroupBox
+            {
+                Dock = DockStyle.Top,
+                Height = 110,
+                Text = "Lateral faces"
+            };
+            Label heightLabel = new Label { AutoSize = true, Location = new Point(12, 27), Text = "Face height (mm):" };
+            txtFaceHeight = new TextBox { Location = new Point(126, 23), Size = new Size(92, 20), Text = Format(lateralFaceHeightMm), TextAlign = HorizontalAlignment.Right };
+            lblTolerance = new Label { AutoSize = true, Location = new Point(12, 53), Text = "Tolerance (mm):" };
+            txtFaceTolerance = new TextBox { Location = new Point(126, 49), Size = new Size(92, 20), Text = Format(faceToleranceMm), TextAlign = HorizontalAlignment.Right };
+            chkConnectFaces = new CheckBox { AutoSize = true, Location = new Point(12, 77), Text = "Connect faces" };
+            faceGroup.Controls.AddRange(new Control[] { heightLabel, txtFaceHeight, lblTolerance, txtFaceTolerance, chkConnectFaces });
+
+            GroupBox orientationGroup = new GroupBox
+            {
+                Dock = DockStyle.Top,
+                Height = 72,
+                Text = "Hexagon orientation"
+            };
+            radStandsOnVertex = new RadioButton { AutoSize = true, Location = new Point(12, 22), Text = "Stands on a vertex", Checked = true };
+            radStandsOnEdge = new RadioButton { AutoSize = true, Location = new Point(12, 45), Text = "Stands on an edge" };
+            orientationGroup.Controls.AddRange(new Control[] { radStandsOnVertex, radStandsOnEdge });
+
+            GroupBox headerGroup = CreateTextGroup("Header", out txtHeader, out cmbHeaderFont, out cmbHeaderFontSize, out btnHeaderTextColor, out pnlHeaderTextColor, 18, true);
+            GroupBox subtextGroup = CreateTextGroup("Text", out txtSubtext, out cmbSubtextFont, out cmbSubtextFontSize, out btnSubtextTextColor, out pnlSubtextTextColor, 10, true);
+
+            GroupBox countGroup = new GroupBox
+            {
+                Dock = DockStyle.Top,
+                Height = 55,
+                Text = "Number of nets"
+            };
+            numHexagonCount = new NumericUpDown { Location = new Point(12, 21), Size = new Size(57, 20), Minimum = 1, Maximum = 1, Value = 1 };
+            countGroup.Controls.Add(numHexagonCount);
+
+            Label generalSettingsLabel = new Label { AutoSize = true, Dock = DockStyle.Top, Font = new Font(Font, FontStyle.Bold), Height = 20, Text = "General settings" };
+            Label designSettingsLabel = new Label { AutoSize = true, Dock = DockStyle.Top, Font = new Font(Font, FontStyle.Bold), Height = 30, Padding = new Padding(0, 10, 0, 0), Text = "Hexagon design" };
+
+            GroupBox imageGroup = new GroupBox
+            {
+                Dock = DockStyle.Top,
+                Height = 138,
+                Text = "Hexagon image"
+            };
+            btnAddImage = new Button { Location = new Point(12, 21), Size = new Size(100, 23), Text = "Add image..." };
+            btnRemoveImage = new Button { Location = new Point(119, 21), Size = new Size(100, 23), Text = "Remove", Enabled = false };
+            lblImageName = new Label { AutoEllipsis = true, Location = new Point(12, 53), Size = new Size(218, 20), Text = "PNG, JPEG, BMP, or GIF" };
+            Label hexagonImageScaleLabel = new Label { AutoSize = true, Location = new Point(12, 79), Text = "Scale (%):" };
+            numHexagonImageScale = CreateImageScaleInput(new Point(78, 75));
+            Label hexagonPositionLabel = new Label { AutoSize = true, Location = new Point(12, 108), Text = "Move (1 mm):" };
+            imageGroup.Controls.AddRange(new Control[]
+            {
+                btnAddImage, btnRemoveImage, lblImageName, hexagonImageScaleLabel, numHexagonImageScale, hexagonPositionLabel,
+                CreateImageMoveButton(new Point(82, 103), "←", ImageTarget.Hexagon, -1, 0),
+                CreateImageMoveButton(new Point(107, 103), "↑", ImageTarget.Hexagon, 0, -1),
+                CreateImageMoveButton(new Point(132, 103), "↓", ImageTarget.Hexagon, 0, 1),
+                CreateImageMoveButton(new Point(157, 103), "→", ImageTarget.Hexagon, 1, 0)
+            });
+
+            GroupBox faceImageGroup = new GroupBox
+            {
+                Dock = DockStyle.Top,
+                Height = 138,
+                Text = "Face image"
+            };
+            btnAddFaceImage = new Button { Location = new Point(12, 21), Size = new Size(100, 23), Text = "Add image..." };
+            btnRemoveFaceImage = new Button { Location = new Point(119, 21), Size = new Size(100, 23), Text = "Remove", Enabled = false };
+            lblFaceImageName = new Label { AutoEllipsis = true, Location = new Point(12, 53), Size = new Size(218, 20), Text = "Repeated and rotated on all six faces" };
+            Label faceImageScaleLabel = new Label { AutoSize = true, Location = new Point(12, 79), Text = "Scale (%):" };
+            numFaceImageScale = CreateImageScaleInput(new Point(78, 75));
+            chkFaceImageFlip = new CheckBox { AutoSize = true, Location = new Point(154, 77), Text = "Flip (180°)" };
+            Label facePositionLabel = new Label { AutoSize = true, Location = new Point(12, 108), Text = "Move (1 mm):" };
+            faceImageGroup.Controls.AddRange(new Control[]
+            {
+                btnAddFaceImage, btnRemoveFaceImage, lblFaceImageName, faceImageScaleLabel, numFaceImageScale, chkFaceImageFlip, facePositionLabel,
+                CreateImageMoveButton(new Point(82, 103), "←", ImageTarget.Face, -1, 0),
+                CreateImageMoveButton(new Point(107, 103), "↑", ImageTarget.Face, 0, -1),
+                CreateImageMoveButton(new Point(132, 103), "↓", ImageTarget.Face, 0, 1),
+                CreateImageMoveButton(new Point(157, 103), "→", ImageTarget.Face, 1, 0)
+            });
+
+            GroupBox faceTextGroup = new GroupBox
+            {
+                Dock = DockStyle.Top,
+                Height = 267,
+                Text = "Face text"
+            };
+            txtFaceText = new TextBox
+            {
+                Location = new Point(12, 21),
+                Size = new Size(206, 60),
+                Multiline = true,
+                WordWrap = false,
+                ScrollBars = ScrollBars.Both
+            };
+            Label faceTextFontLabel = new Label { AutoSize = true, Location = new Point(12, 92), Text = "Font:" };
+            cmbFaceTextFont = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Location = new Point(48, 89), Size = new Size(116, 21) };
+            Label faceTextSizeLabel = new Label { AutoSize = true, Location = new Point(169, 92), Text = "Size:" };
+            cmbFaceTextFontSize = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Location = new Point(202, 89), Size = new Size(43, 21) };
+            btnFaceTextColor = new Button { Location = new Point(12, 118), Size = new Size(100, 23), Text = "Text color..." };
+            pnlFaceTextColor = new Panel { Location = new Point(119, 119), Size = new Size(28, 21), BackColor = Color.Black, BorderStyle = BorderStyle.FixedSingle };
+            Label faceTextAlignmentLabel = new Label { AutoSize = true, Location = new Point(12, 153), Text = "Alignment:" };
+            cmbFaceTextAlignment = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Location = new Point(80, 150), Size = new Size(84, 21) };
+            cmbFaceTextAlignment.Items.AddRange(new object[] { "Center", "Left", "Right" });
+            cmbFaceTextAlignment.SelectedIndex = 0;
+            radFaceTextRepeat = new RadioButton { AutoSize = true, Location = new Point(12, 180), Text = "Repeat on every face", Checked = true };
+            radFaceTextWrapAround = new RadioButton { AutoSize = true, Location = new Point(12, 203), Text = "Wrap around" };
+            radFaceTextLinePerFace = new RadioButton { AutoSize = true, Location = new Point(12, 226), Text = "Line per face" };
+            Label faceTextStartLabel = new Label { AutoSize = true, Location = new Point(136, 228), Text = "Start at:" };
+            cmbFaceTextStartAt = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Location = new Point(192, 224), Size = new Size(45, 21), Enabled = false };
+            for (int faceNumber = 1; faceNumber <= 6; faceNumber++)
+            {
+                cmbFaceTextStartAt.Items.Add(faceNumber.ToString(CultureInfo.InvariantCulture));
+            }
+            cmbFaceTextStartAt.SelectedIndex = 0;
+            PopulateFontOptions(cmbFaceTextFont, cmbFaceTextFontSize, 10);
+            faceTextGroup.Controls.AddRange(new Control[]
+            {
+                txtFaceText, faceTextFontLabel, cmbFaceTextFont, faceTextSizeLabel, cmbFaceTextFontSize,
+                btnFaceTextColor, pnlFaceTextColor, faceTextAlignmentLabel, cmbFaceTextAlignment,
+                radFaceTextRepeat, radFaceTextWrapAround, radFaceTextLinePerFace, faceTextStartLabel, cmbFaceTextStartAt
+            });
+
+            GroupBox backgroundColorGroup = new GroupBox
+            {
+                Dock = DockStyle.Top,
+                Height = 80,
+                Text = "Background colors"
+            };
+            btnHexagonBackgroundColor = new Button { Location = new Point(12, 20), Size = new Size(100, 23), Text = "Hexagon..." };
+            pnlHexagonBackgroundColor = new Panel { Location = new Point(119, 21), Size = new Size(28, 21), BackColor = hexagonBackgroundColor, BorderStyle = BorderStyle.FixedSingle };
+            btnFaceBackgroundColor = new Button { Location = new Point(12, 49), Size = new Size(100, 23), Text = "Faces..." };
+            pnlFaceBackgroundColor = new Panel { Location = new Point(119, 50), Size = new Size(28, 21), BackColor = faceBackgroundColor, BorderStyle = BorderStyle.FixedSingle };
+            backgroundColorGroup.Controls.AddRange(new Control[] { btnHexagonBackgroundColor, pnlHexagonBackgroundColor, btnFaceBackgroundColor, pnlFaceBackgroundColor });
+
+            bool wideLayoutActive = false;
+            Action arrangeBackgroundColors = () =>
+            {
+                if (wideLayoutActive)
+                {
+                    int facesColumnLeft = Math.Max(135, backgroundColorGroup.ClientSize.Width / 2);
+                    btnHexagonBackgroundColor.Location = new Point(12, 20);
+                    pnlHexagonBackgroundColor.Location = new Point(119, 21);
+                    btnFaceBackgroundColor.Location = new Point(facesColumnLeft, 20);
+                    pnlFaceBackgroundColor.Location = new Point(facesColumnLeft + 107, 21);
+                }
+                else
+                {
+                    btnHexagonBackgroundColor.Location = new Point(12, 20);
+                    pnlHexagonBackgroundColor.Location = new Point(119, 21);
+                    btnFaceBackgroundColor.Location = new Point(12, 49);
+                    pnlFaceBackgroundColor.Location = new Point(119, 50);
+                }
+            };
+            backgroundColorGroup.Resize += delegate { arrangeBackgroundColors(); };
+
+            GroupBox lineStyleGroup = new GroupBox
+            {
+                Dock = DockStyle.Top,
+                Height = 82,
+                Text = "Line style"
+            };
+            btnLineColor = new Button { Location = new Point(12, 21), Size = new Size(100, 23), Text = "Line color..." };
+            pnlLineColor = new Panel { Location = new Point(119, 22), Size = new Size(28, 21), BackColor = lineColor, BorderStyle = BorderStyle.FixedSingle };
+            Label thicknessLabel = new Label { AutoSize = true, Location = new Point(12, 53), Text = "Thickness (mm):" };
+            numLineThickness = new NumericUpDown
+            {
+                Location = new Point(105, 49),
+                Size = new Size(69, 20),
+                DecimalPlaces = 2,
+                Increment = 0.05m,
+                Minimum = 0.05m,
+                Maximum = 10m,
+                Value = 0.35m
+            };
+            lineStyleGroup.Controls.AddRange(new Control[] { btnLineColor, pnlLineColor, thicknessLabel, numLineThickness });
+
+            lblConversions = new Label
+            {
+                AutoSize = false,
+                Dock = DockStyle.Top,
+                Height = 72,
+                Padding = new Padding(3, 8, 3, 3),
+                BorderStyle = BorderStyle.FixedSingle
+            };
+
+            FlowLayoutPanel buttons = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Top,
+                Height = 39,
+                FlowDirection = FlowDirection.LeftToRight
+            };
+            btnCreate = new Button { AutoSize = true, Text = "Create" };
+            btnPrint = new Button { AutoSize = true, Text = "Print...", Enabled = false };
+            btnLoadLayout = new Button { AutoSize = true, Text = "Load layout..." };
+            btnSaveLayout = new Button { AutoSize = true, Text = "Save layout..." };
+            buttons.Controls.AddRange(new Control[] { btnLoadLayout, btnSaveLayout, btnCreate, btnPrint });
+
+            TableLayoutPanel generalSettingsLayout = new TableLayoutPanel
+            {
+                Dock = DockStyle.Top,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty
+            };
+            TableLayoutPanel hexagonDesignLayout = new TableLayoutPanel
+            {
+                Dock = DockStyle.Top,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty
+            };
+
+            Action<bool> configureResponsiveLayout = wideLayout =>
+            {
+                wideLayoutActive = wideLayout;
+                generalSettingsLayout.SuspendLayout();
+                generalSettingsLayout.Controls.Clear();
+                generalSettingsLayout.ColumnStyles.Clear();
+                generalSettingsLayout.RowStyles.Clear();
+                generalSettingsLayout.ColumnCount = wideLayout ? 2 : 1;
+                generalSettingsLayout.RowCount = wideLayout ? 3 : 5;
+                for (int column = 0; column < generalSettingsLayout.ColumnCount; column++)
+                {
+                    generalSettingsLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f / generalSettingsLayout.ColumnCount));
+                }
+                if (wideLayout)
+                {
+                    generalSettingsLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 155));
+                    generalSettingsLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 82));
+                    generalSettingsLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 55));
+                    generalSettingsLayout.Height = 292;
+                    generalSettingsLayout.Controls.Add(hexGroup, 0, 0);
+                    generalSettingsLayout.Controls.Add(faceGroup, 1, 0);
+                    generalSettingsLayout.Controls.Add(orientationGroup, 0, 1);
+                    generalSettingsLayout.Controls.Add(lineStyleGroup, 1, 1);
+                    generalSettingsLayout.Controls.Add(countGroup, 0, 2);
+                    generalSettingsLayout.SetColumnSpan(countGroup, 2);
+                }
+                else
+                {
+                    generalSettingsLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 155));
+                    generalSettingsLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 110));
+                    generalSettingsLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
+                    generalSettingsLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 82));
+                    generalSettingsLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 55));
+                    generalSettingsLayout.Height = 474;
+                    generalSettingsLayout.Controls.Add(hexGroup, 0, 0);
+                    generalSettingsLayout.Controls.Add(faceGroup, 0, 1);
+                    generalSettingsLayout.Controls.Add(orientationGroup, 0, 2);
+                    generalSettingsLayout.Controls.Add(lineStyleGroup, 0, 3);
+                    generalSettingsLayout.Controls.Add(countGroup, 0, 4);
+                }
+                generalSettingsLayout.ResumeLayout();
+
+                hexagonDesignLayout.SuspendLayout();
+                hexagonDesignLayout.Controls.Clear();
+                hexagonDesignLayout.ColumnStyles.Clear();
+                hexagonDesignLayout.RowStyles.Clear();
+                hexagonDesignLayout.ColumnCount = wideLayout ? 2 : 1;
+                hexagonDesignLayout.RowCount = wideLayout ? 4 : 6;
+                for (int column = 0; column < hexagonDesignLayout.ColumnCount; column++)
+                {
+                    hexagonDesignLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f / hexagonDesignLayout.ColumnCount));
+                }
+                if (wideLayout)
+                {
+                    hexagonDesignLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 152));
+                    hexagonDesignLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 152));
+                    hexagonDesignLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 80));
+                    hexagonDesignLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 138));
+                    hexagonDesignLayout.Height = 522;
+                    hexagonDesignLayout.Controls.Add(headerGroup, 0, 0);
+                    hexagonDesignLayout.Controls.Add(subtextGroup, 0, 1);
+                    hexagonDesignLayout.Controls.Add(faceTextGroup, 1, 0);
+                    hexagonDesignLayout.SetRowSpan(faceTextGroup, 2);
+                    hexagonDesignLayout.Controls.Add(backgroundColorGroup, 0, 2);
+                    hexagonDesignLayout.SetColumnSpan(backgroundColorGroup, 2);
+                    hexagonDesignLayout.Controls.Add(imageGroup, 0, 3);
+                    hexagonDesignLayout.Controls.Add(faceImageGroup, 1, 3);
+                }
+                else
+                {
+                    hexagonDesignLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 152));
+                    hexagonDesignLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 152));
+                    hexagonDesignLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 267));
+                    hexagonDesignLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 80));
+                    hexagonDesignLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 138));
+                    hexagonDesignLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 138));
+                    hexagonDesignLayout.Height = 927;
+                    hexagonDesignLayout.Controls.Add(headerGroup, 0, 0);
+                    hexagonDesignLayout.Controls.Add(subtextGroup, 0, 1);
+                    hexagonDesignLayout.Controls.Add(faceTextGroup, 0, 2);
+                    hexagonDesignLayout.Controls.Add(backgroundColorGroup, 0, 3);
+                    hexagonDesignLayout.Controls.Add(imageGroup, 0, 4);
+                    hexagonDesignLayout.Controls.Add(faceImageGroup, 0, 5);
+                }
+                hexagonDesignLayout.ResumeLayout();
+
+                foreach (Control group in new Control[]
+                {
+                    hexGroup, faceGroup, orientationGroup, lineStyleGroup, countGroup,
+                    headerGroup, subtextGroup, faceTextGroup, backgroundColorGroup, imageGroup, faceImageGroup
+                })
+                {
+                    group.Dock = DockStyle.Fill;
+                    group.Margin = Padding.Empty;
+                }
+                arrangeBackgroundColors();
+                settingsPanel.Width = wideLayout ? Math.Min(580, Math.Max(520, ClientSize.Width / 3)) : 275;
+            };
+
+            configureResponsiveLayout(false);
+
+            // Docked controls are added in reverse display order.
+            settingsPanel.Controls.Add(buttons);
+            settingsPanel.Controls.Add(lblConversions);
+            settingsPanel.Controls.Add(hexagonDesignLayout);
+            settingsPanel.Controls.Add(designTabs);
+            settingsPanel.Controls.Add(designSettingsLabel);
+            settingsPanel.Controls.Add(generalSettingsLayout);
+            settingsPanel.Controls.Add(generalSettingsLabel);
+            settingsPanel.Controls.Add(instructions);
+
+            preview = new NetPreviewPanel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = SystemColors.ControlDark,
+                BorderStyle = BorderStyle.FixedSingle
+            };
+
+            Controls.Add(preview);
+            Controls.Add(settingsPanel);
+
+            printDocument = new PrintDocument();
+            printDocument.DocumentName = "Hexagonal prism net";
+            printDocument.OriginAtMargins = true;
+            printDocument.PrintPage += printDocument_PrintPage;
+
+            radSideLength.CheckedChanged += measurementTypeChanged;
+            radVertexDiameter.CheckedChanged += measurementTypeChanged;
+            radEdgeDiameter.CheckedChanged += measurementTypeChanged;
+            txtHexValue.TextChanged += inputChanged;
+            txtFaceHeight.TextChanged += inputChanged;
+            txtFaceTolerance.TextChanged += inputChanged;
+            chkConnectFaces.CheckedChanged += lineStyleChanged;
+            numHexagonCount.ValueChanged += numHexagonCount_ValueChanged;
+            designTabs.SelectedIndexChanged += designTabs_SelectedIndexChanged;
+            radStandsOnVertex.CheckedChanged += orientationChanged;
+            radStandsOnEdge.CheckedChanged += orientationChanged;
+            txtHeader.TextChanged += textAppearanceChanged;
+            cmbHeaderFont.SelectedIndexChanged += textAppearanceChanged;
+            cmbHeaderFontSize.SelectedIndexChanged += textAppearanceChanged;
+            btnHeaderTextColor.Click += btnTextColor_Click;
+            txtSubtext.TextChanged += textAppearanceChanged;
+            cmbSubtextFont.SelectedIndexChanged += textAppearanceChanged;
+            cmbSubtextFontSize.SelectedIndexChanged += textAppearanceChanged;
+            btnSubtextTextColor.Click += btnTextColor_Click;
+            btnAddImage.Click += btnAddImage_Click;
+            btnRemoveImage.Click += btnRemoveImage_Click;
+            numHexagonImageScale.ValueChanged += imageAppearanceChanged;
+            btnAddFaceImage.Click += btnAddFaceImage_Click;
+            btnRemoveFaceImage.Click += btnRemoveFaceImage_Click;
+            numFaceImageScale.ValueChanged += imageAppearanceChanged;
+            chkFaceImageFlip.CheckedChanged += imageAppearanceChanged;
+            txtFaceText.TextChanged += faceTextAppearanceChanged;
+            cmbFaceTextFont.SelectedIndexChanged += faceTextAppearanceChanged;
+            cmbFaceTextFontSize.SelectedIndexChanged += faceTextAppearanceChanged;
+            btnFaceTextColor.Click += btnTextColor_Click;
+            cmbFaceTextAlignment.SelectedIndexChanged += faceTextAppearanceChanged;
+            radFaceTextRepeat.CheckedChanged += faceTextAppearanceChanged;
+            radFaceTextWrapAround.CheckedChanged += faceTextAppearanceChanged;
+            radFaceTextLinePerFace.CheckedChanged += faceTextAppearanceChanged;
+            cmbFaceTextStartAt.SelectedIndexChanged += faceTextAppearanceChanged;
+            btnHexagonBackgroundColor.Click += btnBackgroundColor_Click;
+            btnFaceBackgroundColor.Click += btnBackgroundColor_Click;
+            btnLineColor.Click += btnLineColor_Click;
+            numLineThickness.ValueChanged += lineStyleChanged;
+            btnLoadLayout.Click += btnLoadLayout_Click;
+            btnSaveLayout.Click += btnSaveLayout_Click;
+            btnCreate.Click += btnCreate_Click;
+            btnPrint.Click += btnPrint_Click;
+            preview.Paint += preview_Paint;
+            Resize += delegate
+            {
+                configureResponsiveLayout(ClientSize.Width >= 1180);
+            };
+
+            designs.Add(ReadDesignFromEditor());
+            RebuildDesignTabs();
+            UpdateFaceOptions();
+            UpdateFaceTextOptions();
+            UpdateMaximumNetCount();
+            UpdateConversionText();
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                foreach (HexagonDesign design in designs)
+                {
+                    design.Dispose();
+                }
+            }
+            base.Dispose(disposing);
+        }
+
+        private void numHexagonCount_ValueChanged(object sender, EventArgs e)
+        {
+            if (loadingLayout)
+            {
+                return;
+            }
+
+            SaveActiveDesign();
+            int requestedCount = (int)numHexagonCount.Value;
+            while (designs.Count < requestedCount)
+            {
+                designs.Add(designs[activeDesignIndex].Clone());
+            }
+            while (designs.Count > requestedCount)
+            {
+                HexagonDesign removedDesign = designs[designs.Count - 1];
+                designs.RemoveAt(designs.Count - 1);
+                removedDesign.Dispose();
+            }
+
+            activeDesignIndex = Math.Min(activeDesignIndex, designs.Count - 1);
+            RebuildDesignTabs();
+            LoadActiveDesign();
+            UpdateA4Layout();
+            preview.Invalidate();
+        }
+
+        private void designTabs_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            if (loadingDesign || designTabs.SelectedIndex < 0 || designTabs.SelectedIndex == activeDesignIndex)
+            {
+                return;
+            }
+
+            SaveActiveDesign();
+            activeDesignIndex = designTabs.SelectedIndex;
+            LoadActiveDesign();
+            preview.Invalidate();
+        }
+
+        private void RebuildDesignTabs()
+        {
+            loadingDesign = true;
+            designTabs.TabPages.Clear();
+            for (int i = 0; i < designs.Count; i++)
+            {
+                designTabs.TabPages.Add("Hexagon " + (i + 1));
+            }
+            designTabs.SelectedIndex = activeDesignIndex;
+            loadingDesign = false;
+        }
+
+        private void SaveActiveDesign()
+        {
+            if (loadingDesign || designs.Count == 0 || activeDesignIndex < 0 || activeDesignIndex >= designs.Count)
+            {
+                return;
+            }
+
+            HexagonDesign design = designs[activeDesignIndex];
+            design.HeaderText = txtHeader.Text;
+            design.HeaderFontName = cmbHeaderFont.SelectedItem as string;
+            design.HeaderFontSize = GetSelectedFontSize(cmbHeaderFontSize);
+            design.HeaderTextColor = headerTextColor;
+            design.Subtext = txtSubtext.Text;
+            design.SubtextFontName = cmbSubtextFont.SelectedItem as string;
+            design.SubtextFontSize = GetSelectedFontSize(cmbSubtextFontSize);
+            design.SubtextColor = subtextTextColor;
+            design.HexagonBackgroundColor = hexagonBackgroundColor;
+            design.FaceBackgroundColor = faceBackgroundColor;
+            design.HexagonImage = hexagonImage;
+            design.HexagonImageScale = numHexagonImageScale.Value;
+            design.FaceImage = faceImage;
+            design.FaceImageScale = numFaceImageScale.Value;
+            design.FaceImageFlip = chkFaceImageFlip.Checked;
+            design.FaceText = txtFaceText.Text;
+            design.FaceTextFontName = cmbFaceTextFont.SelectedItem as string;
+            design.FaceTextFontSize = GetSelectedFontSize(cmbFaceTextFontSize);
+            design.FaceTextColor = pnlFaceTextColor.BackColor;
+            design.FaceTextAlignment = cmbFaceTextAlignment.SelectedIndex;
+            design.FaceTextWrapAround = radFaceTextWrapAround.Checked;
+            design.FaceTextLinePerFace = radFaceTextLinePerFace.Checked;
+            design.FaceTextStartAt = cmbFaceTextStartAt.SelectedIndex + 1;
+        }
+
+        private HexagonDesign ReadDesignFromEditor()
+        {
+            HexagonDesign design = new HexagonDesign();
+            design.HeaderText = txtHeader.Text;
+            design.HeaderFontName = cmbHeaderFont.SelectedItem as string;
+            design.HeaderFontSize = GetSelectedFontSize(cmbHeaderFontSize);
+            design.HeaderTextColor = headerTextColor;
+            design.Subtext = txtSubtext.Text;
+            design.SubtextFontName = cmbSubtextFont.SelectedItem as string;
+            design.SubtextFontSize = GetSelectedFontSize(cmbSubtextFontSize);
+            design.SubtextColor = subtextTextColor;
+            design.HexagonBackgroundColor = hexagonBackgroundColor;
+            design.FaceBackgroundColor = faceBackgroundColor;
+            design.HexagonImage = hexagonImage;
+            design.HexagonImageScale = numHexagonImageScale.Value;
+            design.FaceImage = faceImage;
+            design.FaceImageScale = numFaceImageScale.Value;
+            design.FaceImageFlip = chkFaceImageFlip.Checked;
+            design.FaceText = txtFaceText.Text;
+            design.FaceTextFontName = cmbFaceTextFont.SelectedItem as string;
+            design.FaceTextFontSize = GetSelectedFontSize(cmbFaceTextFontSize);
+            design.FaceTextColor = pnlFaceTextColor.BackColor;
+            design.FaceTextAlignment = cmbFaceTextAlignment.SelectedIndex;
+            design.FaceTextWrapAround = radFaceTextWrapAround.Checked;
+            design.FaceTextLinePerFace = radFaceTextLinePerFace.Checked;
+            design.FaceTextStartAt = cmbFaceTextStartAt.SelectedIndex + 1;
+            return design;
+        }
+
+        private void LoadActiveDesign()
+        {
+            if (designs.Count == 0)
+            {
+                return;
+            }
+
+            HexagonDesign design = designs[activeDesignIndex];
+            loadingDesign = true;
+            txtHeader.Text = design.HeaderText;
+            SelectComboItem(cmbHeaderFont, design.HeaderFontName);
+            SelectComboItem(cmbHeaderFontSize, design.HeaderFontSize.ToString(CultureInfo.InvariantCulture));
+            headerTextColor = design.HeaderTextColor;
+            pnlHeaderTextColor.BackColor = headerTextColor;
+            txtSubtext.Text = design.Subtext;
+            SelectComboItem(cmbSubtextFont, design.SubtextFontName);
+            SelectComboItem(cmbSubtextFontSize, design.SubtextFontSize.ToString(CultureInfo.InvariantCulture));
+            subtextTextColor = design.SubtextColor;
+            pnlSubtextTextColor.BackColor = subtextTextColor;
+            hexagonBackgroundColor = design.HexagonBackgroundColor;
+            pnlHexagonBackgroundColor.BackColor = hexagonBackgroundColor;
+            faceBackgroundColor = design.FaceBackgroundColor;
+            pnlFaceBackgroundColor.BackColor = faceBackgroundColor;
+            hexagonImage = design.HexagonImage;
+            numHexagonImageScale.Value = design.HexagonImageScale;
+            lblImageName.Text = hexagonImage == null ? "PNG, JPEG, BMP, or GIF" : "Image selected";
+            btnRemoveImage.Enabled = hexagonImage != null;
+            faceImage = design.FaceImage;
+            numFaceImageScale.Value = design.FaceImageScale;
+            chkFaceImageFlip.Checked = design.FaceImageFlip;
+            lblFaceImageName.Text = faceImage == null ? "Repeated and rotated on all six faces" : "Image selected";
+            btnRemoveFaceImage.Enabled = faceImage != null;
+            txtFaceText.Text = design.FaceText;
+            SelectComboItem(cmbFaceTextFont, design.FaceTextFontName);
+            SelectComboItem(cmbFaceTextFontSize, design.FaceTextFontSize.ToString(CultureInfo.InvariantCulture));
+            pnlFaceTextColor.BackColor = design.FaceTextColor;
+            cmbFaceTextAlignment.SelectedIndex = Math.Max(0, Math.Min(2, design.FaceTextAlignment));
+            radFaceTextLinePerFace.Checked = design.FaceTextLinePerFace;
+            radFaceTextWrapAround.Checked = !design.FaceTextLinePerFace && design.FaceTextWrapAround;
+            radFaceTextRepeat.Checked = !design.FaceTextLinePerFace && !design.FaceTextWrapAround;
+            cmbFaceTextStartAt.SelectedIndex = Math.Max(0, Math.Min(5, design.FaceTextStartAt - 1));
+            UpdateFaceTextOptions();
+            loadingDesign = false;
+        }
+
+        private static int GetSelectedFontSize(ComboBox comboBox)
+        {
+            int value;
+            return int.TryParse(comboBox.SelectedItem as string, NumberStyles.Integer, CultureInfo.InvariantCulture, out value) ? value : 10;
+        }
+
+        private static void SelectComboItem(ComboBox comboBox, string value)
+        {
+            if (value != null)
+            {
+                comboBox.SelectedItem = value;
+            }
+            if (comboBox.SelectedIndex < 0 && comboBox.Items.Count > 0)
+            {
+                comboBox.SelectedIndex = 0;
+            }
+        }
+
+        private void measurementTypeChanged(object sender, EventArgs e)
+        {
+            if (((RadioButton)sender).Checked)
+            {
+                txtHexValue.Text = Format(GetSelectedMeasurement(sideLengthMm));
+            }
+        }
+
+        private void inputChanged(object sender, EventArgs e)
+        {
+            UpdateFaceOptions();
+            UpdateMaximumNetCount();
+            UpdateConversionText();
+        }
+
+        private void UpdateFaceOptions()
+        {
+            float height;
+            bool hasFaces = TryParseNonNegative(txtFaceHeight.Text, out height) && height > 0;
+            txtFaceTolerance.Enabled = hasFaces;
+            lblTolerance.Enabled = hasFaces;
+            chkConnectFaces.Enabled = hasFaces;
+        }
+
+        private void orientationChanged(object sender, EventArgs e)
+        {
+            if (!((RadioButton)sender).Checked)
+            {
+                return;
+            }
+
+            UpdateMaximumNetCount();
+            if (!hasNet)
+            {
+                return;
+            }
+
+            bool fitsOnA4 = TryGetA4Orientation(GetNetBounds(sideLengthMm, lateralFaceHeightMm, faceToleranceMm, radStandsOnVertex.Checked), out a4Landscape);
+            btnPrint.Enabled = fitsOnA4;
+            if (fitsOnA4)
+            {
+                ConfigureA4Page();
+            }
+            preview.Invalidate();
+        }
+
+        private void textAppearanceChanged(object sender, EventArgs e)
+        {
+            SaveActiveDesign();
+            if (hasNet)
+            {
+                preview.Invalidate();
+            }
+        }
+
+        private void faceTextAppearanceChanged(object sender, EventArgs e)
+        {
+            UpdateFaceTextOptions();
+            SaveActiveDesign();
+            if (hasNet)
+            {
+                preview.Invalidate();
+            }
+        }
+
+        private void UpdateFaceTextOptions()
+        {
+            cmbFaceTextStartAt.Enabled = radFaceTextWrapAround.Checked || radFaceTextLinePerFace.Checked;
+        }
+
+        private void btnLineColor_Click(object sender, EventArgs e)
+        {
+            using (ColorDialog dialog = new ColorDialog())
+            {
+                dialog.Color = lineColor;
+                if (dialog.ShowDialog(this) == DialogResult.OK)
+                {
+                    lineColor = dialog.Color;
+                    pnlLineColor.BackColor = lineColor;
+                    lineStyleChanged(sender, e);
+                }
+            }
+        }
+
+        private void lineStyleChanged(object sender, EventArgs e)
+        {
+            if (hasNet)
+            {
+                preview.Invalidate();
+            }
+        }
+
+        private void btnTextColor_Click(object sender, EventArgs e)
+        {
+            bool isHeader = sender == btnHeaderTextColor;
+            bool isFaceText = sender == btnFaceTextColor;
+            Color currentColor = isHeader ? headerTextColor : (isFaceText ? pnlFaceTextColor.BackColor : subtextTextColor);
+            using (ColorDialog dialog = new ColorDialog())
+            {
+                dialog.Color = currentColor;
+                if (dialog.ShowDialog(this) == DialogResult.OK)
+                {
+                    if (isHeader)
+                    {
+                        headerTextColor = dialog.Color;
+                        pnlHeaderTextColor.BackColor = headerTextColor;
+                    }
+                    else if (isFaceText)
+                    {
+                        pnlFaceTextColor.BackColor = dialog.Color;
+                    }
+                    else
+                    {
+                        subtextTextColor = dialog.Color;
+                        pnlSubtextTextColor.BackColor = subtextTextColor;
+                    }
+                    if (isFaceText)
+                    {
+                        faceTextAppearanceChanged(sender, e);
+                    }
+                    else
+                    {
+                        textAppearanceChanged(sender, e);
+                    }
+                }
+            }
+        }
+
+        private void btnAddImage_Click(object sender, EventArgs e)
+        {
+            Image loadedImage;
+            string fileName;
+            if (!TrySelectImage(out loadedImage, out fileName))
+            {
+                return;
+            }
+
+            DisposeImage(ref hexagonImage);
+            hexagonImage = loadedImage;
+            designs[activeDesignIndex].HexagonImageOffsetX = 0;
+            designs[activeDesignIndex].HexagonImageOffsetY = 0;
+            lblImageName.Text = fileName;
+            btnRemoveImage.Enabled = true;
+            imageAppearanceChanged(sender, e);
+        }
+
+        private void btnAddFaceImage_Click(object sender, EventArgs e)
+        {
+            Image loadedImage;
+            string fileName;
+            if (!TrySelectImage(out loadedImage, out fileName))
+            {
+                return;
+            }
+
+            DisposeImage(ref faceImage);
+            faceImage = loadedImage;
+            designs[activeDesignIndex].FaceImageOffsetX = 0;
+            designs[activeDesignIndex].FaceImageOffsetY = 0;
+            lblFaceImageName.Text = fileName;
+            btnRemoveFaceImage.Enabled = true;
+            imageAppearanceChanged(sender, e);
+        }
+
+        private void btnRemoveImage_Click(object sender, EventArgs e)
+        {
+            DisposeImage(ref hexagonImage);
+            designs[activeDesignIndex].HexagonImageOffsetX = 0;
+            designs[activeDesignIndex].HexagonImageOffsetY = 0;
+            lblImageName.Text = "PNG, JPEG, BMP, or GIF";
+            btnRemoveImage.Enabled = false;
+            imageAppearanceChanged(sender, e);
+        }
+
+        private void btnRemoveFaceImage_Click(object sender, EventArgs e)
+        {
+            DisposeImage(ref faceImage);
+            designs[activeDesignIndex].FaceImageOffsetX = 0;
+            designs[activeDesignIndex].FaceImageOffsetY = 0;
+            lblFaceImageName.Text = "Repeated and rotated on all six faces";
+            btnRemoveFaceImage.Enabled = false;
+            imageAppearanceChanged(sender, e);
+        }
+
+        private bool TrySelectImage(out Image image, out string fileName)
+        {
+            image = null;
+            fileName = null;
+            using (OpenFileDialog dialog = new OpenFileDialog())
+            {
+                dialog.Title = "Select clip art or image";
+                dialog.Filter = "Image files|*.png;*.jpg;*.jpeg;*.bmp;*.gif|PNG files|*.png|JPEG files|*.jpg;*.jpeg|All files|*.*";
+                if (dialog.ShowDialog(this) != DialogResult.OK)
+                {
+                    return false;
+                }
+
+                try
+                {
+                    using (Image source = Image.FromFile(dialog.FileName))
+                    {
+                        image = (Image)source.Clone();
+                    }
+                    fileName = System.IO.Path.GetFileName(dialog.FileName);
+                    return true;
+                }
+                catch (Exception exception)
+                {
+                    MessageBox.Show(this, "The selected file could not be loaded as an image.\r\n\r\n" + exception.Message, "Unable to load image", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return false;
+                }
+            }
+        }
+
+        private static void DisposeImage(ref Image image)
+        {
+            if (image != null)
+            {
+                image.Dispose();
+                image = null;
+            }
+        }
+
+        private void imageAppearanceChanged(object sender, EventArgs e)
+        {
+            SaveActiveDesign();
+            if (hasNet)
+            {
+                preview.Invalidate();
+            }
+        }
+
+        private Button CreateImageMoveButton(Point location, string text, ImageTarget target, int horizontalStep, int verticalStep)
+        {
+            Button button = new Button { Location = location, Size = new Size(23, 23), Text = text, Tag = new ImageMove(target, horizontalStep, verticalStep) };
+            button.Click += imageMoveButton_Click;
+            return button;
+        }
+
+        private void imageMoveButton_Click(object sender, EventArgs e)
+        {
+            ImageMove move = (ImageMove)((Button)sender).Tag;
+            HexagonDesign design = designs[activeDesignIndex];
+            if (move.Target == ImageTarget.Hexagon)
+            {
+                design.HexagonImageOffsetX += move.HorizontalStep;
+                design.HexagonImageOffsetY += move.VerticalStep;
+            }
+            else
+            {
+                design.FaceImageOffsetX += move.HorizontalStep;
+                design.FaceImageOffsetY += move.VerticalStep;
+            }
+
+            if (hasNet)
+            {
+                preview.Invalidate();
+            }
+        }
+
+        private void btnBackgroundColor_Click(object sender, EventArgs e)
+        {
+            bool isHexagon = sender == btnHexagonBackgroundColor;
+            using (ColorDialog dialog = new ColorDialog())
+            {
+                dialog.Color = isHexagon ? hexagonBackgroundColor : faceBackgroundColor;
+                if (dialog.ShowDialog(this) == DialogResult.OK)
+                {
+                    if (isHexagon)
+                    {
+                        hexagonBackgroundColor = dialog.Color;
+                        pnlHexagonBackgroundColor.BackColor = hexagonBackgroundColor;
+                    }
+                    else
+                    {
+                        faceBackgroundColor = dialog.Color;
+                        pnlFaceBackgroundColor.BackColor = faceBackgroundColor;
+                    }
+                    imageAppearanceChanged(sender, e);
+                }
+            }
+        }
+
+        private void btnSaveLayout_Click(object sender, EventArgs e)
+        {
+            SaveActiveDesign();
+            using (SaveFileDialog dialog = new SaveFileDialog())
+            {
+                dialog.Filter = "Hexagon net layout (*.hexnet)|*.hexnet|All files (*.*)|*.*";
+                dialog.DefaultExt = "hexnet";
+                dialog.AddExtension = true;
+                if (dialog.ShowDialog(this) != DialogResult.OK)
+                {
+                    return;
+                }
+
+                try
+                {
+                    DataContractJsonSerializer serializer = new DataContractJsonSerializer(typeof(NetLayoutFile));
+                    using (FileStream stream = File.Create(dialog.FileName))
+                    {
+                        serializer.WriteObject(stream, CreateLayoutFile());
+                    }
+                }
+                catch (Exception exception)
+                {
+                    MessageBox.Show(this, "The layout could not be saved.\r\n\r\n" + exception.Message, "Save layout", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+            }
+        }
+
+        private void btnLoadLayout_Click(object sender, EventArgs e)
+        {
+            using (OpenFileDialog dialog = new OpenFileDialog())
+            {
+                dialog.Filter = "Hexagon net layout (*.hexnet)|*.hexnet|All files (*.*)|*.*";
+                if (dialog.ShowDialog(this) != DialogResult.OK)
+                {
+                    return;
+                }
+
+                List<HexagonDesign> loadedDesigns = null;
+                try
+                {
+                    NetLayoutFile layout;
+                    DataContractJsonSerializer serializer = new DataContractJsonSerializer(typeof(NetLayoutFile));
+                    using (FileStream stream = File.OpenRead(dialog.FileName))
+                    {
+                        layout = (NetLayoutFile)serializer.ReadObject(stream);
+                    }
+                    if (layout == null || layout.Designs == null || layout.Designs.Count == 0)
+                    {
+                        throw new InvalidDataException("This file does not contain a hexagon-net layout.");
+                    }
+
+                    loadedDesigns = new List<HexagonDesign>();
+                    foreach (NetDesignFile savedDesign in layout.Designs)
+                    {
+                        loadedDesigns.Add(CreateDesignFromFile(savedDesign));
+                    }
+                    ApplyLayoutFile(layout, loadedDesigns);
+                    loadedDesigns = null;
+                }
+                catch (Exception exception)
+                {
+                    if (loadedDesigns != null)
+                    {
+                        foreach (HexagonDesign design in loadedDesigns)
+                        {
+                            design.Dispose();
+                        }
+                    }
+                    MessageBox.Show(this, "The layout could not be loaded.\r\n\r\n" + exception.Message, "Load layout", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+            }
+        }
+
+        private NetLayoutFile CreateLayoutFile()
+        {
+            NetLayoutFile layout = new NetLayoutFile
+            {
+                MeasurementType = radSideLength.Checked ? 0 : (radVertexDiameter.Checked ? 1 : 2),
+                HexagonValue = txtHexValue.Text,
+                FaceHeight = txtFaceHeight.Text,
+                FaceTolerance = txtFaceTolerance.Text,
+                ConnectFaces = chkConnectFaces.Checked,
+                StandsOnVertex = radStandsOnVertex.Checked,
+                LineColorArgb = lineColor.ToArgb(),
+                LineThickness = numLineThickness.Value,
+                HasNet = hasNet,
+                Designs = new List<NetDesignFile>()
+            };
+            foreach (HexagonDesign design in designs)
+            {
+                layout.Designs.Add(CreateDesignFile(design));
+            }
+            return layout;
+        }
+
+        private static NetDesignFile CreateDesignFile(HexagonDesign design)
+        {
+            return new NetDesignFile
+            {
+                HeaderText = design.HeaderText,
+                HeaderFontName = design.HeaderFontName,
+                HeaderFontSize = design.HeaderFontSize,
+                HeaderTextColorArgb = design.HeaderTextColor.ToArgb(),
+                Subtext = design.Subtext,
+                SubtextFontName = design.SubtextFontName,
+                SubtextFontSize = design.SubtextFontSize,
+                SubtextColorArgb = design.SubtextColor.ToArgb(),
+                HexagonBackgroundColorArgb = design.HexagonBackgroundColor.ToArgb(),
+                FaceBackgroundColorArgb = design.FaceBackgroundColor.ToArgb(),
+                HexagonImage = ImageToBase64(design.HexagonImage),
+                HexagonImageScale = design.HexagonImageScale,
+                HexagonImageOffsetX = design.HexagonImageOffsetX,
+                HexagonImageOffsetY = design.HexagonImageOffsetY,
+                FaceImage = ImageToBase64(design.FaceImage),
+                FaceImageScale = design.FaceImageScale,
+                FaceImageOffsetX = design.FaceImageOffsetX,
+                FaceImageOffsetY = design.FaceImageOffsetY,
+                FaceImageFlip = design.FaceImageFlip,
+                FaceText = design.FaceText,
+                FaceTextFontName = design.FaceTextFontName,
+                FaceTextFontSize = design.FaceTextFontSize,
+                FaceTextColorArgb = design.FaceTextColor.ToArgb(),
+                FaceTextAlignment = design.FaceTextAlignment,
+                FaceTextWrapAround = design.FaceTextWrapAround,
+                FaceTextLinePerFace = design.FaceTextLinePerFace,
+                FaceTextStartAt = design.FaceTextStartAt
+            };
+        }
+
+        private void ApplyLayoutFile(NetLayoutFile layout, List<HexagonDesign> loadedDesigns)
+        {
+            loadingLayout = true;
+            try
+            {
+                radSideLength.Checked = layout.MeasurementType == 0;
+                radVertexDiameter.Checked = layout.MeasurementType == 1;
+                radEdgeDiameter.Checked = layout.MeasurementType == 2;
+                txtHexValue.Text = layout.HexagonValue ?? String.Empty;
+                txtFaceHeight.Text = layout.FaceHeight ?? String.Empty;
+                txtFaceTolerance.Text = layout.FaceTolerance ?? String.Empty;
+                chkConnectFaces.Checked = layout.ConnectFaces;
+                radStandsOnVertex.Checked = layout.StandsOnVertex;
+                radStandsOnEdge.Checked = !layout.StandsOnVertex;
+                lineColor = Color.FromArgb(layout.LineColorArgb);
+                pnlLineColor.BackColor = lineColor;
+                numLineThickness.Value = Math.Max(numLineThickness.Minimum, Math.Min(numLineThickness.Maximum, layout.LineThickness));
+                UpdateFaceOptions();
+                UpdateMaximumNetCount();
+
+                if (loadedDesigns.Count > (int)numHexagonCount.Maximum)
+                {
+                    throw new InvalidDataException("This layout contains more nets than fit on one A4 page with its saved measurements.");
+                }
+
+                foreach (HexagonDesign existingDesign in designs)
+                {
+                    existingDesign.Dispose();
+                }
+                designs.Clear();
+                designs.AddRange(loadedDesigns);
+                activeDesignIndex = 0;
+                numHexagonCount.Value = designs.Count;
+                RebuildDesignTabs();
+                LoadActiveDesign();
+
+                float parsedSide = 0;
+                float parsedHeight = 0;
+                float parsedTolerance = 0;
+                hasNet = layout.HasNet && TryReadValues(out parsedSide, out parsedHeight, out parsedTolerance);
+                if (hasNet)
+                {
+                    sideLengthMm = parsedSide;
+                    lateralFaceHeightMm = parsedHeight;
+                    faceToleranceMm = parsedTolerance;
+                    UpdateA4Layout();
+                }
+                else
+                {
+                    btnPrint.Enabled = false;
+                }
+                preview.Invalidate();
+            }
+            finally
+            {
+                loadingLayout = false;
+            }
+        }
+
+        private static string ImageToBase64(Image image)
+        {
+            if (image == null)
+            {
+                return null;
+            }
+
+            using (MemoryStream stream = new MemoryStream())
+            {
+                image.Save(stream, ImageFormat.Png);
+                return Convert.ToBase64String(stream.ToArray());
+            }
+        }
+
+        private static Image ImageFromBase64(string imageData)
+        {
+            if (String.IsNullOrEmpty(imageData))
+            {
+                return null;
+            }
+
+            byte[] bytes = Convert.FromBase64String(imageData);
+            using (MemoryStream stream = new MemoryStream(bytes))
+            using (Image source = Image.FromStream(stream))
+            {
+                return new Bitmap(source);
+            }
+        }
+
+        private static HexagonDesign CreateDesignFromFile(NetDesignFile savedDesign)
+        {
+            if (savedDesign == null)
+            {
+                throw new InvalidDataException("The layout contains an invalid hexagon design.");
+            }
+
+            return new HexagonDesign
+            {
+                HeaderText = savedDesign.HeaderText,
+                HeaderFontName = savedDesign.HeaderFontName,
+                HeaderFontSize = savedDesign.HeaderFontSize,
+                HeaderTextColor = Color.FromArgb(savedDesign.HeaderTextColorArgb),
+                Subtext = savedDesign.Subtext,
+                SubtextFontName = savedDesign.SubtextFontName,
+                SubtextFontSize = savedDesign.SubtextFontSize,
+                SubtextColor = Color.FromArgb(savedDesign.SubtextColorArgb),
+                HexagonBackgroundColor = Color.FromArgb(savedDesign.HexagonBackgroundColorArgb),
+                FaceBackgroundColor = Color.FromArgb(savedDesign.FaceBackgroundColorArgb),
+                HexagonImage = ImageFromBase64(savedDesign.HexagonImage),
+                HexagonImageScale = savedDesign.HexagonImageScale,
+                HexagonImageOffsetX = savedDesign.HexagonImageOffsetX,
+                HexagonImageOffsetY = savedDesign.HexagonImageOffsetY,
+                FaceImage = ImageFromBase64(savedDesign.FaceImage),
+                FaceImageScale = savedDesign.FaceImageScale,
+                FaceImageOffsetX = savedDesign.FaceImageOffsetX,
+                FaceImageOffsetY = savedDesign.FaceImageOffsetY,
+                FaceImageFlip = savedDesign.FaceImageFlip,
+                FaceText = savedDesign.FaceText,
+                FaceTextFontName = savedDesign.FaceTextFontName,
+                FaceTextFontSize = savedDesign.FaceTextFontSize,
+                FaceTextColor = Color.FromArgb(savedDesign.FaceTextColorArgb),
+                FaceTextAlignment = savedDesign.FaceTextAlignment,
+                FaceTextWrapAround = savedDesign.FaceTextWrapAround,
+                FaceTextLinePerFace = savedDesign.FaceTextLinePerFace,
+                FaceTextStartAt = savedDesign.FaceTextStartAt
+            };
+        }
+
+        private void btnCreate_Click(object sender, EventArgs e)
+        {
+            float parsedSideLength;
+            float parsedFaceHeight;
+            float parsedTolerance;
+            if (!TryReadValues(out parsedSideLength, out parsedFaceHeight, out parsedTolerance))
+            {
+                MessageBox.Show(this, "Please enter a positive hexagon measurement, a non-negative face height, and a non-negative tolerance.", "Invalid dimensions", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            sideLengthMm = parsedSideLength;
+            lateralFaceHeightMm = parsedFaceHeight;
+            faceToleranceMm = parsedTolerance;
+            hasNet = true;
+            UpdateMaximumNetCount();
+            bool fitsOnA4 = TryGetA4Orientation(GetNetBounds(sideLengthMm, lateralFaceHeightMm, faceToleranceMm, radStandsOnVertex.Checked), out a4Landscape);
+            btnPrint.Enabled = fitsOnA4;
+            if (fitsOnA4)
+            {
+                ConfigureA4Page();
+            }
+            else
+            {
+                MessageBox.Show(this, "This net does not fit on one A4 page at the requested measurements. It is shown in the preview, but will not be scaled when printed.", "Net is too large for A4", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            UpdateConversionText();
+            preview.Invalidate();
+        }
+
+        private void btnPrint_Click(object sender, EventArgs e)
+        {
+            if (!TryGetA4Orientation(GetNetBounds(sideLengthMm, lateralFaceHeightMm, faceToleranceMm, radStandsOnVertex.Checked), out a4Landscape))
+            {
+                MessageBox.Show(this, "This net does not fit on one A4 page without changing its measurements.", "Net is too large for A4", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            ConfigureA4Page();
+            using (PrintDialog dialog = new PrintDialog())
+            {
+                dialog.Document = printDocument;
+                if (dialog.ShowDialog(this) == DialogResult.OK)
+                {
+                    printDocument.Print();
+                }
+            }
+        }
+
+        private void preview_Paint(object sender, PaintEventArgs e)
+        {
+            if (!hasNet)
+            {
+                TextRenderer.DrawText(e.Graphics, "Click Create to preview the net.", Font, preview.ClientRectangle, SystemColors.GrayText, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+                return;
+            }
+
+            RectangleF bounds = GetNetBounds(sideLengthMm, lateralFaceHeightMm, faceToleranceMm, radStandsOnVertex.Checked);
+            int columns;
+            int rows;
+            bool fitsOnA4 = TryGetA4Layout(bounds, out bool previewLandscape, out columns, out rows);
+            if (!fitsOnA4)
+            {
+                columns = 1;
+                rows = 1;
+            }
+            SizeF pageSize = GetA4PageSize(previewLandscape);
+            const float previewPadding = 20;
+            float scale = Math.Min((preview.ClientSize.Width - previewPadding * 2) / pageSize.Width, (preview.ClientSize.Height - previewPadding * 2) / pageSize.Height);
+            if (scale <= 0)
+            {
+                return;
+            }
+
+            RectangleF page = new RectangleF(
+                (preview.ClientSize.Width - pageSize.Width * scale) / 2f,
+                (preview.ClientSize.Height - pageSize.Height * scale) / 2f,
+                pageSize.Width * scale,
+                pageSize.Height * scale);
+            e.Graphics.FillRectangle(Brushes.White, page);
+            e.Graphics.DrawRectangle(Pens.DimGray, page.X, page.Y, page.Width, page.Height);
+
+            float marginMm = A4MarginHundredthsInch * MillimetresPerHundredthInch;
+            float printableWidth = pageSize.Width - marginMm * 2f;
+            float printableHeight = pageSize.Height - marginMm * 2f;
+            const float gapMm = 5f;
+            float gridWidth = columns * bounds.Width + Math.Max(0, columns - 1) * gapMm;
+            float gridHeight = rows * bounds.Height + Math.Max(0, rows - 1) * gapMm;
+            float gridLeft = marginMm + (printableWidth - gridWidth) / 2f;
+            float gridTop = marginMm + (printableHeight - gridHeight) / 2f;
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            GraphicsState savedState = e.Graphics.Save();
+            e.Graphics.SetClip(page);
+            for (int i = 0; i < designs.Count; i++)
+            {
+                int column = i % columns;
+                int row = i / columns;
+                PointF origin = new PointF(
+                    page.Left + (gridLeft + column * (bounds.Width + gapMm) - bounds.Left) * scale,
+                    page.Top + (gridTop + row * (bounds.Height + gapMm) - bounds.Top) * scale);
+                DrawNet(e.Graphics, sideLengthMm, lateralFaceHeightMm, faceToleranceMm, scale, origin, 1f, false, designs[i]);
+            }
+            e.Graphics.Restore(savedState);
+
+            if (!fitsOnA4)
+            {
+                TextRenderer.DrawText(e.Graphics, "Does not fit on A4 at true size", Font, Rectangle.Round(page), Color.Firebrick, TextFormatFlags.HorizontalCenter | TextFormatFlags.Top);
+            }
+        }
+
+        private void printDocument_PrintPage(object sender, PrintPageEventArgs e)
+        {
+            RectangleF bounds = GetNetBounds(sideLengthMm, lateralFaceHeightMm, faceToleranceMm, radStandsOnVertex.Checked);
+            if (!FitsOnA4(bounds, e.PageSettings.Landscape))
+            {
+                e.Cancel = true;
+                BeginInvoke((MethodInvoker)delegate
+                {
+                    MessageBox.Show(this, "The selected page orientation cannot contain this net at true size. Please use the automatically selected A4 orientation.", "Net is too large for A4", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                });
+                return;
+            }
+
+            // OriginAtMargins moves (0,0) to the configured A4 margin.
+            // Millimetres as the page unit make the PDF/printer output 1:1.
+            e.Graphics.PageUnit = GraphicsUnit.Millimeter;
+            SizeF pageSize = GetA4PageSize(e.PageSettings.Landscape);
+            float marginMm = A4MarginHundredthsInch * MillimetresPerHundredthInch;
+            float printableWidth = pageSize.Width - marginMm * 2f;
+            float printableHeight = pageSize.Height - marginMm * 2f;
+            const float gapMm = 5f;
+            int columns = (int)Math.Floor((printableWidth + gapMm) / (bounds.Width + gapMm));
+            int rows = (int)Math.Floor((printableHeight + gapMm) / (bounds.Height + gapMm));
+            float gridWidth = columns * bounds.Width + Math.Max(0, columns - 1) * gapMm;
+            float gridHeight = rows * bounds.Height + Math.Max(0, rows - 1) * gapMm;
+            float gridLeft = (printableWidth - gridWidth) / 2f;
+            float gridTop = (printableHeight - gridHeight) / 2f;
+
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            for (int i = 0; i < designs.Count; i++)
+            {
+                int column = i % columns;
+                int row = i / columns;
+                PointF origin = new PointF(
+                    gridLeft + column * (bounds.Width + gapMm) - bounds.Left,
+                    gridTop + row * (bounds.Height + gapMm) - bounds.Top);
+                DrawNet(e.Graphics, sideLengthMm, lateralFaceHeightMm, faceToleranceMm, 1f, origin, 0f, true, designs[i]);
+            }
+            e.HasMorePages = false;
+        }
+
+        private void DrawNet(Graphics graphics, float side, float faceHeight, float tolerance, float scale, PointF origin, float minimumLineWidth, bool isPhysicalOutput, HexagonDesign design)
+        {
+            PointF[] hexagon = GetHexagon(side, radStandsOnVertex.Checked);
+            PointF[] screenHexagon = ScalePoints(hexagon, scale, origin);
+
+            using (Pen outline = new Pen(lineColor, Math.Max(minimumLineWidth, (float)numLineThickness.Value * scale)))
+            using (Brush hexagonBrush = new SolidBrush(design.HexagonBackgroundColor))
+            using (Brush faceBrush = new SolidBrush(design.FaceBackgroundColor))
+            {
+                graphics.FillPolygon(hexagonBrush, screenHexagon);
+                graphics.DrawPolygon(outline, screenHexagon);
+
+                if (faceHeight > 0)
+                {
+                    if (chkConnectFaces.Checked)
+                    {
+                        for (int i = 0; i < hexagon.Length; i++)
+                        {
+                            PointF vertex = hexagon[(i + 1) % hexagon.Length];
+                            PointF currentNormal = GetOutwardNormal(hexagon[i], vertex);
+                            PointF nextNormal = GetOutwardNormal(vertex, hexagon[(i + 2) % hexagon.Length]);
+                            PointF currentOuterCorner = new PointF(vertex.X + currentNormal.X * faceHeight, vertex.Y + currentNormal.Y * faceHeight);
+                            PointF nextOuterCorner = new PointF(vertex.X + nextNormal.X * faceHeight, vertex.Y + nextNormal.Y * faceHeight);
+                            PointF[] connector = new PointF[] { vertex, currentOuterCorner, nextOuterCorner };
+                            graphics.FillPolygon(faceBrush, ScalePoints(connector, scale, origin));
+                        }
+                    }
+
+                    for (int i = 0; i < hexagon.Length; i++)
+                    {
+                    PointF first = hexagon[i];
+                    PointF second = hexagon[(i + 1) % hexagon.Length];
+                    PointF outward = GetOutwardNormal(first, second);
+                    PointF[] face = new PointF[]
+                    {
+                        first,
+                        second,
+                        new PointF(second.X + outward.X * faceHeight, second.Y + outward.Y * faceHeight),
+                        new PointF(first.X + outward.X * faceHeight, first.Y + outward.Y * faceHeight)
+                    };
+                    PointF[] screenFace = ScalePoints(face, scale, origin);
+                    graphics.FillPolygon(faceBrush, screenFace);
+                    DrawFaceImage(graphics, first, second, outward, side, faceHeight, scale, origin, design);
+                    DrawFaceText(graphics, i, first, second, outward, side, faceHeight, scale, origin, isPhysicalOutput, design);
+                    graphics.DrawPolygon(outline, screenFace);
+
+                    if (tolerance > 0)
+                    {
+                        PointF outerFirst = face[3];
+                        PointF outerSecond = face[2];
+                        PointF[] toleranceFace = new PointF[]
+                        {
+                            outerFirst,
+                            outerSecond,
+                            new PointF(outerSecond.X + outward.X * tolerance, outerSecond.Y + outward.Y * tolerance),
+                            new PointF(outerFirst.X + outward.X * tolerance, outerFirst.Y + outward.Y * tolerance)
+                        };
+                        PointF[] screenToleranceFace = ScalePoints(toleranceFace, scale, origin);
+                        graphics.FillPolygon(faceBrush, screenToleranceFace);
+                        graphics.DrawPolygon(outline, screenToleranceFace);
+                    }
+                    }
+
+                    if (chkConnectFaces.Checked)
+                    {
+                        for (int i = 0; i < hexagon.Length; i++)
+                        {
+                            PointF vertex = hexagon[(i + 1) % hexagon.Length];
+                            PointF currentNormal = GetOutwardNormal(hexagon[i], vertex);
+                            PointF nextNormal = GetOutwardNormal(vertex, hexagon[(i + 2) % hexagon.Length]);
+                            PointF currentOuterCorner = new PointF(vertex.X + currentNormal.X * faceHeight, vertex.Y + currentNormal.Y * faceHeight);
+                            PointF nextOuterCorner = new PointF(vertex.X + nextNormal.X * faceHeight, vertex.Y + nextNormal.Y * faceHeight);
+                            PointF[] connectorEdge = ScalePoints(new PointF[] { currentOuterCorner, nextOuterCorner }, scale, origin);
+                            graphics.DrawLine(outline, connectorEdge[0], connectorEdge[1]);
+                        }
+                    }
+                }
+            }
+
+            DrawHexagonImage(graphics, side, scale, origin, design);
+            DrawHexagonText(graphics, scale, origin, isPhysicalOutput, design);
+        }
+
+        private void DrawHexagonImage(Graphics graphics, float side, float scale, PointF origin, HexagonDesign design)
+        {
+            if (design.HexagonImage == null || design.HexagonImage.Width == 0 || design.HexagonImage.Height == 0)
+            {
+                return;
+            }
+
+            // This square remains inside either regular-hexagon orientation.
+            float maximumSize = side * 1.1f * scale * (float)design.HexagonImageScale / 100f;
+            float imageScale = Math.Min(maximumSize / design.HexagonImage.Width, maximumSize / design.HexagonImage.Height);
+            float imageWidth = design.HexagonImage.Width * imageScale;
+            float imageHeight = design.HexagonImage.Height * imageScale;
+            RectangleF imageBounds = new RectangleF(
+                origin.X + (float)design.HexagonImageOffsetX * scale - imageWidth / 2f,
+                origin.Y + (float)design.HexagonImageOffsetY * scale - imageHeight / 2f,
+                imageWidth,
+                imageHeight);
+
+            GraphicsState savedState = graphics.Save();
+            using (GraphicsPath hexagonClip = new GraphicsPath())
+            {
+                hexagonClip.AddPolygon(ScalePoints(GetHexagon(side, radStandsOnVertex.Checked), scale, origin));
+                graphics.SetClip(hexagonClip, CombineMode.Intersect);
+            }
+            graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
+            graphics.DrawImage(design.HexagonImage, imageBounds);
+            graphics.Restore(savedState);
+        }
+
+        private void DrawFaceImage(Graphics graphics, PointF first, PointF second, PointF outward, float side, float faceHeight, float scale, PointF origin, HexagonDesign design)
+        {
+            if (design.FaceImage == null || design.FaceImage.Width == 0 || design.FaceImage.Height == 0)
+            {
+                return;
+            }
+
+            float scalePercent = (float)design.FaceImageScale / 100f;
+            float maximumWidth = side * 0.8f * scale * scalePercent;
+            float maximumHeight = faceHeight * 0.8f * scale * scalePercent;
+            float imageScale = Math.Min(maximumWidth / design.FaceImage.Width, maximumHeight / design.FaceImage.Height);
+            float imageWidth = design.FaceImage.Width * imageScale;
+            float imageHeight = design.FaceImage.Height * imageScale;
+            PointF imageCenter = new PointF(
+                origin.X + ((first.X + second.X) / 2f + outward.X * faceHeight / 2f) * scale,
+                origin.Y + ((first.Y + second.Y) / 2f + outward.Y * faceHeight / 2f) * scale);
+            float angle = (float)(Math.Atan2(second.Y - first.Y, second.X - first.X) * 180d / Math.PI);
+            if (design.FaceImageFlip)
+            {
+                angle += 180f;
+            }
+
+            GraphicsState savedState = graphics.Save();
+            graphics.TranslateTransform(imageCenter.X, imageCenter.Y);
+            graphics.RotateTransform(angle);
+            graphics.SetClip(new RectangleF(-side * scale / 2f, -faceHeight * scale / 2f, side * scale, faceHeight * scale), CombineMode.Intersect);
+            graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
+            graphics.DrawImage(design.FaceImage, new RectangleF(
+                (float)design.FaceImageOffsetX * scale - imageWidth / 2f,
+                (float)design.FaceImageOffsetY * scale - imageHeight / 2f,
+                imageWidth,
+                imageHeight));
+            graphics.Restore(savedState);
+        }
+
+        private void DrawFaceText(Graphics graphics, int faceIndex, PointF first, PointF second, PointF outward, float side, float faceHeight, float scale, PointF origin, bool isPhysicalOutput, HexagonDesign design)
+        {
+            if (String.IsNullOrWhiteSpace(design.FaceText))
+            {
+                return;
+            }
+
+            PointF faceCenter = new PointF(
+                origin.X + ((first.X + second.X) / 2f + outward.X * faceHeight / 2f) * scale,
+                origin.Y + ((first.Y + second.Y) / 2f + outward.Y * faceHeight / 2f) * scale);
+            float angle = (float)(Math.Atan2(second.Y - first.Y, second.X - first.X) * 180d / Math.PI);
+            float faceWidth = side * scale;
+            float faceTextHeight = faceHeight * scale;
+
+            using (Font textFont = CreateTextFont(design.FaceTextFontName, design.FaceTextFontSize, scale, graphics, isPhysicalOutput))
+            using (Brush textBrush = new SolidBrush(design.FaceTextColor))
+            using (StringFormat textFormat = new StringFormat(StringFormatFlags.NoWrap))
+            {
+                textFormat.Alignment = GetStringAlignment(design.FaceTextAlignment);
+                textFormat.LineAlignment = StringAlignment.Center;
+
+                GraphicsState savedState = graphics.Save();
+                graphics.TranslateTransform(faceCenter.X, faceCenter.Y);
+                graphics.RotateTransform(angle);
+                graphics.SetClip(new RectangleF(-faceWidth / 2f, -faceTextHeight / 2f, faceWidth, faceTextHeight), CombineMode.Intersect);
+
+                RectangleF textArea;
+                string textToDraw = design.FaceText;
+                if (design.FaceTextLinePerFace)
+                {
+                    int startFaceIndex = Math.Max(0, Math.Min(5, design.FaceTextStartAt - 1));
+                    int lineIndex = (faceIndex - startFaceIndex + 6) % 6;
+                    string[] lines = design.FaceText.Replace("\r\n", "\n").Replace('\r', '\n').Split(new[] { '\n' });
+                    textToDraw = lineIndex < lines.Length ? lines[lineIndex] : String.Empty;
+                    textArea = new RectangleF(-faceWidth / 2f, -faceTextHeight / 2f, faceWidth, faceTextHeight);
+                }
+                else if (design.FaceTextWrapAround)
+                {
+                    int startFaceIndex = Math.Max(0, Math.Min(5, design.FaceTextStartAt - 1));
+                    int positionInText = (faceIndex - startFaceIndex + 6) % 6;
+                    textArea = new RectangleF(
+                        -positionInText * faceWidth - faceWidth / 2f,
+                        -faceTextHeight / 2f,
+                        faceWidth * 6f,
+                        faceTextHeight);
+                }
+                else
+                {
+                    textArea = new RectangleF(-faceWidth / 2f, -faceTextHeight / 2f, faceWidth, faceTextHeight);
+                }
+
+                if (!String.IsNullOrEmpty(textToDraw))
+                {
+                    graphics.DrawString(textToDraw, textFont, textBrush, textArea, textFormat);
+                }
+                graphics.Restore(savedState);
+            }
+        }
+
+        private static StringAlignment GetStringAlignment(int selectedIndex)
+        {
+            if (selectedIndex == 1)
+            {
+                return StringAlignment.Near;
+            }
+            if (selectedIndex == 2)
+            {
+                return StringAlignment.Far;
+            }
+            return StringAlignment.Center;
+        }
+
+        private static NumericUpDown CreateImageScaleInput(Point location)
+        {
+            return new NumericUpDown
+            {
+                Location = location,
+                Size = new Size(69, 20),
+                Minimum = 1,
+                Maximum = 500,
+                Value = 100
+            };
+        }
+
+        private static void PopulateFontOptions(ComboBox fontBox, ComboBox fontSizeBox, int defaultFontSize)
+        {
+            foreach (FontFamily family in FontFamily.Families)
+            {
+                fontBox.Items.Add(family.Name);
+            }
+            fontBox.Sorted = true;
+            fontBox.SelectedItem = SystemFonts.DefaultFont.FontFamily.Name;
+            if (fontBox.SelectedIndex < 0 && fontBox.Items.Count > 0)
+            {
+                fontBox.SelectedIndex = 0;
+            }
+
+            int[] sizes = new int[] { 8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48 };
+            foreach (int size in sizes)
+            {
+                fontSizeBox.Items.Add(size.ToString(CultureInfo.InvariantCulture));
+            }
+            fontSizeBox.SelectedItem = defaultFontSize.ToString(CultureInfo.InvariantCulture);
+        }
+
+        private GroupBox CreateTextGroup(string title, out TextBox textBox, out ComboBox fontBox, out ComboBox fontSizeBox, out Button textColorButton, out Panel textColorPreview, int defaultFontSize, bool multiline)
+        {
+            int verticalOffset = multiline ? 40 : 0;
+            GroupBox group = new GroupBox
+            {
+                Dock = DockStyle.Top,
+                Height = 112 + verticalOffset,
+                Text = title
+            };
+
+            textBox = new TextBox
+            {
+                Location = new Point(12, 21),
+                Size = new Size(206, multiline ? 60 : 20),
+                Multiline = multiline,
+                WordWrap = false,
+                ScrollBars = multiline ? ScrollBars.Both : ScrollBars.None
+            };
+            Label fontLabel = new Label { AutoSize = true, Location = new Point(12, 51 + verticalOffset), Text = "Font:" };
+            fontBox = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Location = new Point(48, 48 + verticalOffset), Size = new Size(116, 21) };
+            Label sizeLabel = new Label { AutoSize = true, Location = new Point(169, 51 + verticalOffset), Text = "Size:" };
+            fontSizeBox = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Location = new Point(202, 48 + verticalOffset), Size = new Size(43, 21) };
+            textColorButton = new Button { Location = new Point(12, 77 + verticalOffset), Size = new Size(100, 23), Text = "Text color..." };
+            textColorPreview = new Panel { Location = new Point(119, 78 + verticalOffset), Size = new Size(28, 21), BackColor = Color.Black, BorderStyle = BorderStyle.FixedSingle };
+
+            foreach (FontFamily family in FontFamily.Families)
+            {
+                fontBox.Items.Add(family.Name);
+            }
+            fontBox.Sorted = true;
+            fontBox.SelectedItem = SystemFonts.DefaultFont.FontFamily.Name;
+            if (fontBox.SelectedIndex < 0 && fontBox.Items.Count > 0)
+            {
+                fontBox.SelectedIndex = 0;
+            }
+
+            int[] sizes = new int[] { 8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48 };
+            foreach (int size in sizes)
+            {
+                fontSizeBox.Items.Add(size.ToString(CultureInfo.InvariantCulture));
+            }
+            fontSizeBox.SelectedItem = defaultFontSize.ToString(CultureInfo.InvariantCulture);
+
+            group.Controls.AddRange(new Control[] { textBox, fontLabel, fontBox, sizeLabel, fontSizeBox, textColorButton, textColorPreview });
+            return group;
+        }
+
+        private void DrawHexagonText(Graphics graphics, float scale, PointF origin, bool isPhysicalOutput, HexagonDesign design)
+        {
+            List<TextLine> lines = new List<TextLine>();
+            if (!String.IsNullOrWhiteSpace(design.HeaderText))
+            {
+                lines.Add(new TextLine(design.HeaderText, design.HeaderFontName, design.HeaderFontSize, design.HeaderTextColor));
+            }
+            if (!String.IsNullOrWhiteSpace(design.Subtext))
+            {
+                lines.Add(new TextLine(design.Subtext, design.SubtextFontName, design.SubtextFontSize, design.SubtextColor));
+            }
+            if (lines.Count == 0)
+            {
+                return;
+            }
+
+            float totalHeight = 0;
+            List<Font> fonts = new List<Font>();
+            List<SizeF> sizes = new List<SizeF>();
+            try
+            {
+                foreach (TextLine line in lines)
+                {
+                    Font font = CreateTextFont(line.FontName, line.FontSize, scale, graphics, isPhysicalOutput);
+                    fonts.Add(font);
+                    using (StringFormat measureFormat = new StringFormat(StringFormatFlags.NoWrap))
+                    {
+                        SizeF textSize = graphics.MeasureString(line.Text, font, new SizeF(1000000, 1000000), measureFormat);
+                        sizes.Add(textSize);
+                        totalHeight += textSize.Height;
+                    }
+                }
+
+                float currentY = origin.Y - totalHeight / 2f;
+                for (int i = 0; i < lines.Count; i++)
+                {
+                    float unboundedTextWidth = Math.Max(10000f, sizes[i].Width * 2f);
+                    RectangleF textArea = new RectangleF(origin.X - unboundedTextWidth / 2f, currentY, unboundedTextWidth, sizes[i].Height);
+                    using (StringFormat format = new StringFormat(StringFormatFlags.NoWrap))
+                    using (Brush textBrush = new SolidBrush(lines[i].Color))
+                    {
+                        format.Alignment = StringAlignment.Center;
+                        format.LineAlignment = StringAlignment.Near;
+                        graphics.DrawString(lines[i].Text, fonts[i], textBrush, textArea, format);
+                    }
+                    currentY += sizes[i].Height;
+                }
+            }
+            finally
+            {
+                foreach (Font font in fonts)
+                {
+                    font.Dispose();
+                }
+            }
+        }
+
+        private static Font CreateTextFont(string fontName, int fontSize, float scale, Graphics graphics, bool isPhysicalOutput)
+        {
+            // Point sizes preserve their real-world dimensions on the printed
+            // A4 page. On screen they are converted to the preview's scale.
+            float drawSize = isPhysicalOutput ? fontSize : fontSize * scale * 25.4f / graphics.DpiY;
+            try
+            {
+                return new Font(fontName ?? SystemFonts.DefaultFont.FontFamily.Name, drawSize, FontStyle.Regular, GraphicsUnit.Point);
+            }
+            catch (ArgumentException)
+            {
+                return new Font(SystemFonts.DefaultFont.FontFamily, drawSize, FontStyle.Regular, GraphicsUnit.Point);
+            }
+        }
+
+        private sealed class TextLine
+        {
+            public string Text { get; private set; }
+            public string FontName { get; private set; }
+            public int FontSize { get; private set; }
+            public Color Color { get; private set; }
+
+            public TextLine(string text, string fontName, int fontSize, Color color)
+            {
+                Text = text;
+                FontName = fontName;
+                FontSize = fontSize;
+                Color = color;
+            }
+        }
+
+        [DataContract]
+        private sealed class NetLayoutFile
+        {
+            [DataMember] public int MeasurementType { get; set; }
+            [DataMember] public string HexagonValue { get; set; }
+            [DataMember] public string FaceHeight { get; set; }
+            [DataMember] public string FaceTolerance { get; set; }
+            [DataMember] public bool ConnectFaces { get; set; }
+            [DataMember] public bool StandsOnVertex { get; set; }
+            [DataMember] public int LineColorArgb { get; set; }
+            [DataMember] public decimal LineThickness { get; set; }
+            [DataMember] public bool HasNet { get; set; }
+            [DataMember] public List<NetDesignFile> Designs { get; set; }
+        }
+
+        [DataContract]
+        private sealed class NetDesignFile
+        {
+            [DataMember] public string HeaderText { get; set; }
+            [DataMember] public string HeaderFontName { get; set; }
+            [DataMember] public int HeaderFontSize { get; set; }
+            [DataMember] public int HeaderTextColorArgb { get; set; }
+            [DataMember] public string Subtext { get; set; }
+            [DataMember] public string SubtextFontName { get; set; }
+            [DataMember] public int SubtextFontSize { get; set; }
+            [DataMember] public int SubtextColorArgb { get; set; }
+            [DataMember] public int HexagonBackgroundColorArgb { get; set; }
+            [DataMember] public int FaceBackgroundColorArgb { get; set; }
+            [DataMember] public string HexagonImage { get; set; }
+            [DataMember] public decimal HexagonImageScale { get; set; }
+            [DataMember] public decimal HexagonImageOffsetX { get; set; }
+            [DataMember] public decimal HexagonImageOffsetY { get; set; }
+            [DataMember] public string FaceImage { get; set; }
+            [DataMember] public decimal FaceImageScale { get; set; }
+            [DataMember] public decimal FaceImageOffsetX { get; set; }
+            [DataMember] public decimal FaceImageOffsetY { get; set; }
+            [DataMember] public bool FaceImageFlip { get; set; }
+            [DataMember] public string FaceText { get; set; }
+            [DataMember] public string FaceTextFontName { get; set; }
+            [DataMember] public int FaceTextFontSize { get; set; }
+            [DataMember] public int FaceTextColorArgb { get; set; }
+            [DataMember] public int FaceTextAlignment { get; set; }
+            [DataMember] public bool FaceTextWrapAround { get; set; }
+            [DataMember] public bool FaceTextLinePerFace { get; set; }
+            [DataMember] public int FaceTextStartAt { get; set; }
+        }
+
+        private sealed class HexagonDesign : IDisposable
+        {
+            public string HeaderText;
+            public string HeaderFontName;
+            public int HeaderFontSize;
+            public Color HeaderTextColor;
+            public string Subtext;
+            public string SubtextFontName;
+            public int SubtextFontSize;
+            public Color SubtextColor;
+            public Color HexagonBackgroundColor;
+            public Color FaceBackgroundColor;
+            public Image HexagonImage;
+            public decimal HexagonImageScale;
+            public decimal HexagonImageOffsetX;
+            public decimal HexagonImageOffsetY;
+            public Image FaceImage;
+            public decimal FaceImageScale;
+            public decimal FaceImageOffsetX;
+            public decimal FaceImageOffsetY;
+            public bool FaceImageFlip;
+            public string FaceText;
+            public string FaceTextFontName;
+            public int FaceTextFontSize;
+            public Color FaceTextColor;
+            public int FaceTextAlignment;
+            public bool FaceTextWrapAround;
+            public bool FaceTextLinePerFace;
+            public int FaceTextStartAt;
+
+            public HexagonDesign Clone()
+            {
+                return new HexagonDesign
+                {
+                    HeaderText = HeaderText,
+                    HeaderFontName = HeaderFontName,
+                    HeaderFontSize = HeaderFontSize,
+                    HeaderTextColor = HeaderTextColor,
+                    Subtext = Subtext,
+                    SubtextFontName = SubtextFontName,
+                    SubtextFontSize = SubtextFontSize,
+                    SubtextColor = SubtextColor,
+                    HexagonBackgroundColor = HexagonBackgroundColor,
+                    FaceBackgroundColor = FaceBackgroundColor,
+                    HexagonImage = HexagonImage == null ? null : (Image)HexagonImage.Clone(),
+                    HexagonImageScale = HexagonImageScale,
+                    HexagonImageOffsetX = HexagonImageOffsetX,
+                    HexagonImageOffsetY = HexagonImageOffsetY,
+                    FaceImage = FaceImage == null ? null : (Image)FaceImage.Clone(),
+                    FaceImageScale = FaceImageScale,
+                    FaceImageOffsetX = FaceImageOffsetX,
+                    FaceImageOffsetY = FaceImageOffsetY,
+                    FaceImageFlip = FaceImageFlip,
+                    FaceText = FaceText,
+                    FaceTextFontName = FaceTextFontName,
+                    FaceTextFontSize = FaceTextFontSize,
+                    FaceTextColor = FaceTextColor,
+                    FaceTextAlignment = FaceTextAlignment,
+                    FaceTextWrapAround = FaceTextWrapAround,
+                    FaceTextLinePerFace = FaceTextLinePerFace,
+                    FaceTextStartAt = FaceTextStartAt
+                };
+            }
+
+            public void Dispose()
+            {
+                if (HexagonImage != null)
+                {
+                    HexagonImage.Dispose();
+                    HexagonImage = null;
+                }
+                if (FaceImage != null)
+                {
+                    FaceImage.Dispose();
+                    FaceImage = null;
+                }
+            }
+        }
+
+        private enum ImageTarget
+        {
+            Hexagon,
+            Face
+        }
+
+        private sealed class ImageMove
+        {
+            public ImageTarget Target { get; private set; }
+            public int HorizontalStep { get; private set; }
+            public int VerticalStep { get; private set; }
+
+            public ImageMove(ImageTarget target, int horizontalStep, int verticalStep)
+            {
+                Target = target;
+                HorizontalStep = horizontalStep;
+                VerticalStep = verticalStep;
+            }
+        }
+
+        private void ConfigureA4Page()
+        {
+            PaperSize a4Paper = null;
+            foreach (PaperSize paper in printDocument.PrinterSettings.PaperSizes)
+            {
+                if (paper.Kind == PaperKind.A4)
+                {
+                    a4Paper = paper;
+                    break;
+                }
+            }
+
+            // Some PDF drivers do not advertise their paper sizes. The custom
+            // A4 dimensions use the same unit as PaperSize: 1/100 inch.
+            printDocument.DefaultPageSettings.PaperSize = a4Paper ?? new PaperSize("A4", 827, 1169);
+            printDocument.DefaultPageSettings.Margins = new Margins(
+                A4MarginHundredthsInch,
+                A4MarginHundredthsInch,
+                A4MarginHundredthsInch,
+                A4MarginHundredthsInch);
+            printDocument.DefaultPageSettings.Landscape = a4Landscape;
+        }
+
+        private bool TryGetA4Orientation(RectangleF bounds, out bool landscape)
+        {
+            int columns;
+            int rows;
+            return TryGetA4Layout(bounds, out landscape, out columns, out rows);
+        }
+
+        private bool TryGetA4Layout(RectangleF bounds, out bool landscape, out int columns, out int rows)
+        {
+            const float gapMm = 5f;
+            int requiredCount = Math.Max(1, designs.Count);
+            float bestLayoutScore = float.MaxValue;
+            landscape = false;
+            columns = 0;
+            rows = 0;
+
+            for (int orientation = 0; orientation < 2; orientation++)
+            {
+                bool isLandscape = orientation == 1;
+                SizeF pageSize = GetA4PageSize(isLandscape);
+                float marginMm = A4MarginHundredthsInch * MillimetresPerHundredthInch;
+                float availableWidth = pageSize.Width - marginMm * 2f;
+                float availableHeight = pageSize.Height - marginMm * 2f;
+                int maximumColumns = (int)Math.Floor((availableWidth + gapMm) / (bounds.Width + gapMm));
+                int maximumRows = (int)Math.Floor((availableHeight + gapMm) / (bounds.Height + gapMm));
+                if (maximumColumns < 1 || maximumRows < 1)
+                {
+                    continue;
+                }
+
+                for (int candidateColumns = 1; candidateColumns <= Math.Min(requiredCount, maximumColumns); candidateColumns++)
+                {
+                    int candidateRows = (int)Math.Ceiling((double)requiredCount / candidateColumns);
+                    if (candidateRows > maximumRows)
+                    {
+                        continue;
+                    }
+
+                    float usedWidth = candidateColumns * bounds.Width + (candidateColumns - 1) * gapMm;
+                    float usedHeight = candidateRows * bounds.Height + (candidateRows - 1) * gapMm;
+                    float layoutAspect = usedWidth / usedHeight;
+                    float pageAspect = availableWidth / availableHeight;
+                    float layoutScore = Math.Abs((float)Math.Log(layoutAspect / pageAspect));
+                    if (layoutScore < bestLayoutScore)
+                    {
+                        bestLayoutScore = layoutScore;
+                        landscape = isLandscape;
+                        columns = candidateColumns;
+                        rows = candidateRows;
+                    }
+                }
+            }
+
+            return columns > 0;
+        }
+
+        private bool FitsOnA4(RectangleF bounds, bool landscape)
+        {
+            const float gapMm = 5f;
+            SizeF pageSize = GetA4PageSize(landscape);
+            float marginMm = A4MarginHundredthsInch * MillimetresPerHundredthInch;
+            int columns = (int)Math.Floor((pageSize.Width - marginMm * 2f + gapMm) / (bounds.Width + gapMm));
+            int rows = (int)Math.Floor((pageSize.Height - marginMm * 2f + gapMm) / (bounds.Height + gapMm));
+            return columns * rows >= Math.Max(1, designs.Count);
+        }
+
+        private void UpdateMaximumNetCount()
+        {
+            float side;
+            float faceHeight;
+            float tolerance;
+            if (!TryReadValues(out side, out faceHeight, out tolerance))
+            {
+                return;
+            }
+
+            int maximumNets = Math.Max(1, GetMaximumNetsOnA4(GetNetBounds(side, faceHeight, tolerance, radStandsOnVertex.Checked)));
+            numHexagonCount.Maximum = maximumNets;
+        }
+
+        private static int GetMaximumNetsOnA4(RectangleF bounds)
+        {
+            const float gapMm = 5f;
+            float marginMm = A4MarginHundredthsInch * MillimetresPerHundredthInch;
+            long maximumNets = 0;
+
+            for (int orientation = 0; orientation < 2; orientation++)
+            {
+                SizeF pageSize = GetA4PageSize(orientation == 1);
+                long columns = (long)Math.Floor((pageSize.Width - marginMm * 2f + gapMm) / (bounds.Width + gapMm));
+                long rows = (long)Math.Floor((pageSize.Height - marginMm * 2f + gapMm) / (bounds.Height + gapMm));
+                if (columns > 0 && rows > 0)
+                {
+                    maximumNets = Math.Max(maximumNets, columns * rows);
+                }
+            }
+
+            return maximumNets > Int32.MaxValue ? Int32.MaxValue : (int)maximumNets;
+        }
+
+        private void UpdateA4Layout()
+        {
+            if (!hasNet)
+            {
+                return;
+            }
+
+            RectangleF bounds = GetNetBounds(sideLengthMm, lateralFaceHeightMm, faceToleranceMm, radStandsOnVertex.Checked);
+            btnPrint.Enabled = TryGetA4Orientation(bounds, out a4Landscape);
+            if (btnPrint.Enabled)
+            {
+                ConfigureA4Page();
+            }
+        }
+
+        private static SizeF GetA4PageSize(bool landscape)
+        {
+            return landscape
+                ? new SizeF(A4PortraitHeightMm, A4PortraitWidthMm)
+                : new SizeF(A4PortraitWidthMm, A4PortraitHeightMm);
+        }
+
+        private static PointF[] GetHexagon(float side, bool standsOnVertex)
+        {
+            PointF[] points = new PointF[6];
+            double startAngle = standsOnVertex ? -Math.PI / 2 : 0;
+            for (int i = 0; i < points.Length; i++)
+            {
+                double angle = startAngle + i * Math.PI / 3;
+                points[i] = new PointF((float)(Math.Cos(angle) * side), (float)(Math.Sin(angle) * side));
+            }
+            return points;
+        }
+
+        private static PointF GetOutwardNormal(PointF first, PointF second)
+        {
+            float dx = second.X - first.X;
+            float dy = second.Y - first.Y;
+            float length = (float)Math.Sqrt(dx * dx + dy * dy);
+            PointF normal = new PointF(-dy / length, dx / length);
+            PointF midpoint = new PointF((first.X + second.X) / 2f, (first.Y + second.Y) / 2f);
+            if (normal.X * midpoint.X + normal.Y * midpoint.Y < 0)
+            {
+                normal = new PointF(-normal.X, -normal.Y);
+            }
+            return normal;
+        }
+
+        private static PointF[] ScalePoints(PointF[] points, float scale, PointF origin)
+        {
+            PointF[] result = new PointF[points.Length];
+            for (int i = 0; i < points.Length; i++)
+            {
+                result[i] = new PointF(origin.X + points[i].X * scale, origin.Y + points[i].Y * scale);
+            }
+            return result;
+        }
+
+        private static RectangleF GetNetBounds(float side, float faceHeight, float tolerance, bool standsOnVertex)
+        {
+            PointF[] hexagon = GetHexagon(side, standsOnVertex);
+            float left = float.MaxValue;
+            float top = float.MaxValue;
+            float right = float.MinValue;
+            float bottom = float.MinValue;
+            for (int i = 0; i < hexagon.Length; i++)
+            {
+                PointF first = hexagon[i];
+                PointF second = hexagon[(i + 1) % hexagon.Length];
+                PointF normal = GetOutwardNormal(first, second);
+                AddBoundsPoint(first, ref left, ref top, ref right, ref bottom);
+                AddBoundsPoint(second, ref left, ref top, ref right, ref bottom);
+                if (faceHeight > 0)
+                {
+                    AddBoundsPoint(new PointF(first.X + normal.X * faceHeight, first.Y + normal.Y * faceHeight), ref left, ref top, ref right, ref bottom);
+                    AddBoundsPoint(new PointF(second.X + normal.X * faceHeight, second.Y + normal.Y * faceHeight), ref left, ref top, ref right, ref bottom);
+                    AddBoundsPoint(new PointF(first.X + normal.X * (faceHeight + tolerance), first.Y + normal.Y * (faceHeight + tolerance)), ref left, ref top, ref right, ref bottom);
+                    AddBoundsPoint(new PointF(second.X + normal.X * (faceHeight + tolerance), second.Y + normal.Y * (faceHeight + tolerance)), ref left, ref top, ref right, ref bottom);
+                }
+            }
+            return RectangleF.FromLTRB(left, top, right, bottom);
+        }
+
+        private static void AddBoundsPoint(PointF point, ref float left, ref float top, ref float right, ref float bottom)
+        {
+            left = Math.Min(left, point.X);
+            top = Math.Min(top, point.Y);
+            right = Math.Max(right, point.X);
+            bottom = Math.Max(bottom, point.Y);
+        }
+
+        private bool TryReadValues(out float side, out float height, out float tolerance)
+        {
+            side = 0;
+            height = 0;
+            tolerance = 0;
+            float selectedValue;
+            if (!TryParsePositive(txtHexValue.Text, out selectedValue) || !TryParseNonNegative(txtFaceHeight.Text, out height))
+            {
+                return false;
+            }
+
+            if (height > 0 && !TryParseNonNegative(txtFaceTolerance.Text, out tolerance))
+            {
+                return false;
+            }
+
+            if (radVertexDiameter.Checked)
+            {
+                side = selectedValue / 2f;
+            }
+            else if (radEdgeDiameter.Checked)
+            {
+                side = selectedValue / Sqrt3;
+            }
+            else
+            {
+                side = selectedValue;
+            }
+            return side > 0;
+        }
+
+        private void UpdateConversionText()
+        {
+            float selectedValue;
+            if (!TryParsePositive(txtHexValue.Text, out selectedValue))
+            {
+                lblConversions.Text = "Enter a positive hexagon measurement to see the equivalent dimensions.";
+                return;
+            }
+
+            float side = radVertexDiameter.Checked ? selectedValue / 2f : radEdgeDiameter.Checked ? selectedValue / Sqrt3 : selectedValue;
+            lblConversions.Text = "Equivalent dimensions:\r\n"
+                + "Side length: " + Format(side) + " mm\r\n"
+                + "Vertex to vertex: " + Format(side * 2f) + " mm\r\n"
+                + "Edge to edge: " + Format(side * Sqrt3) + " mm";
+        }
+
+        private float GetSelectedMeasurement(float side)
+        {
+            if (radVertexDiameter.Checked)
+            {
+                return side * 2f;
+            }
+            if (radEdgeDiameter.Checked)
+            {
+                return side * Sqrt3;
+            }
+            return side;
+        }
+
+        private static bool TryParsePositive(string text, out float value)
+        {
+            return float.TryParse(text, NumberStyles.Float, CultureInfo.CurrentCulture, out value) && value > 0;
+        }
+
+        private static bool TryParseNonNegative(string text, out float value)
+        {
+            return float.TryParse(text, NumberStyles.Float, CultureInfo.CurrentCulture, out value) && value >= 0;
+        }
+
+        private static string Format(float value)
+        {
+            return value.ToString("0.###", CultureInfo.CurrentCulture);
+        }
+
+        private sealed class NetPreviewPanel : Panel
+        {
+            public NetPreviewPanel()
+            {
+                DoubleBuffered = true;
+                ResizeRedraw = true;
+            }
+        }
+    }
+}

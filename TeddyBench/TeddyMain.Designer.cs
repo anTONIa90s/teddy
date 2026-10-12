@@ -52,6 +52,7 @@ namespace TeddyBench
             this.downloadToniesjsonOnStartupToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.downloadToniesjsonNowToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.enableDebugModeToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.hexPrismNetToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.helpToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.aboutToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.toolStripMenuItem1 = new System.Windows.Forms.ToolStripSeparator();
@@ -233,7 +234,8 @@ namespace TeddyBench
             this.optionsToolStripMenuItem.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.downloadToniesjsonOnStartupToolStripMenuItem,
             this.downloadToniesjsonNowToolStripMenuItem,
-            this.enableDebugModeToolStripMenuItem});
+            this.enableDebugModeToolStripMenuItem,
+            this.hexPrismNetToolStripMenuItem});
             this.optionsToolStripMenuItem.Name = "optionsToolStripMenuItem";
             this.optionsToolStripMenuItem.Size = new System.Drawing.Size(61, 20);
             this.optionsToolStripMenuItem.Text = "&Options";
@@ -258,7 +260,14 @@ namespace TeddyBench
             this.enableDebugModeToolStripMenuItem.Size = new System.Drawing.Size(245, 22);
             this.enableDebugModeToolStripMenuItem.Text = "Debug window";
             this.enableDebugModeToolStripMenuItem.Click += new System.EventHandler(this.enableDebugModeToolStripMenuItem_Click);
+            //
+            // hexPrismNetToolStripMenuItem
             // 
+            this.hexPrismNetToolStripMenuItem.Name = "hexPrismNetToolStripMenuItem";
+            this.hexPrismNetToolStripMenuItem.Size = new System.Drawing.Size(245, 22);
+            this.hexPrismNetToolStripMenuItem.Text = "Hexagonal prism net...";
+            this.hexPrismNetToolStripMenuItem.Click += new System.EventHandler(this.hexPrismNetToolStripMenuItem_Click);
+            //
             // helpToolStripMenuItem
             // 
             this.helpToolStripMenuItem.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
@@ -801,6 +810,7 @@ namespace TeddyBench
         private System.Windows.Forms.ToolStripMenuItem optionsToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem downloadToniesjsonOnStartupToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem downloadToniesjsonNowToolStripMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem hexPrismNetToolStripMenuItem;
         private System.Windows.Forms.Button btnSetAllLiveFlags;
         private System.Windows.Forms.Button btnRemoveAllLiveFlags;
         private System.Windows.Forms.Button btnAddAllExplorerTitles;
