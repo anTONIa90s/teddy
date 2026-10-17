@@ -7,3 +7,12 @@
 /*/obj
 /packages
 *.user
+
+# Agent worktrees and task work directories (branch-start, tiered-code-research)
+.work/
+
+# Agent workspace kit (local only)
+.claude/
+.agents/
+CLAUDE.md
+agent-workspace-kit/

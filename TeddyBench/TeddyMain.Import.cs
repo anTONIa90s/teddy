@@ -175,7 +175,11 @@ private void btnAdd_Click(object sender, EventArgs e)
             public override void FileStart(int track, string sourceFile)
             {
                 ParseName(track, sourceFile);
-                ChapterTitles.Add(Path.GetFileNameWithoutExtension(DisplayName));
+                // ID3v2.4 text fields can include a terminating NUL character.
+                // DisplayName may come from that field, but Path methods reject NUL
+                // and the other Windows-invalid filename characters.
+                string chapterTitle = RemoveInvalidChars(DisplayName).Trim();
+                ChapterTitles.Add(Path.GetFileNameWithoutExtension(chapterTitle));
                 Main.BeginInvoke(new Action(() => { Main.txtLog.Text += " File: " + ShortName; }));
             }
 
@@ -243,7 +247,12 @@ private void btnAdd_Click(object sender, EventArgs e)
                 }
                 catch (Exception ex)
                 {
-                    MessageBox.Show("Failed to encode file. Sorry. Most likely a MP3 was corrupted." + Environment.NewLine + "(" + ex.Message + ")");
+                    Exception cause = ex.GetBaseException();
+                    MessageBox.Show(
+                        "Failed to encode file." + Environment.NewLine + Environment.NewLine +
+                        "Details: " + cause.Message + Environment.NewLine + Environment.NewLine +
+                        "While processing: " + ex.Message,
+                        "Failed to encode file");
                     return;
                 }
 

@@ -529,7 +529,7 @@ namespace TonieFile
                             }
                             catch (Exception ex)
                             {
-                                throw new Exception("Failed processing prefix file '" + prefixFile + "'");
+                                throw new Exception("Failed processing prefix file '" + prefixFile + "'", ex);
                             }
                         }
 
@@ -602,13 +602,13 @@ namespace TonieFile
                     {
                         string msg = "Failed processing " + sourceFile;
                         cbr.Failed(msg);
-                        throw new Exception(msg);
+                        throw new Exception(msg, e);
                     }
                     catch (Exception e)
                     {
                         string msg = "Failed processing " + sourceFile;
                         cbr.Failed(msg);
-                        throw new Exception(msg);
+                        throw new Exception(msg, e);
                     }
 
                     if (!warned && outputData.Length >= maxSize / 2)

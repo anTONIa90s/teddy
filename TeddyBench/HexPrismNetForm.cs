@@ -59,11 +59,13 @@ namespace TeddyBench
         private readonly NumericUpDown numFaceImageScale;
         private readonly CheckBox chkFaceImageFlip;
         private readonly TextBox txtFaceText;
+        private readonly ToolTip faceTextToolTip;
         private readonly ComboBox cmbFaceTextFont;
         private readonly ComboBox cmbFaceTextFontSize;
         private readonly Button btnFaceTextColor;
         private readonly Panel pnlFaceTextColor;
         private readonly ComboBox cmbFaceTextAlignment;
+        private readonly CheckBox chkFaceTextFlipTopToBottom;
         private readonly RadioButton radFaceTextRepeat;
         private readonly RadioButton radFaceTextWrapAround;
         private readonly RadioButton radFaceTextLinePerFace;
@@ -104,6 +106,7 @@ namespace TeddyBench
             StartPosition = FormStartPosition.CenterParent;
             MinimumSize = new Size(780, 690);
             Size = new Size(920, 740);
+            faceTextToolTip = new ToolTip();
 
             Panel settingsPanel = new Panel
             {
@@ -220,7 +223,7 @@ namespace TeddyBench
             GroupBox faceTextGroup = new GroupBox
             {
                 Dock = DockStyle.Top,
-                Height = 267,
+                Height = 292,
                 Text = "Face text"
             };
             txtFaceText = new TextBox
@@ -231,6 +234,13 @@ namespace TeddyBench
                 WordWrap = false,
                 ScrollBars = ScrollBars.Both
             };
+            faceTextToolTip.SetToolTip(txtFaceText,
+                "Use BBCode-style tags for inline formatting.\r\n" +
+                "[b]bold[/b], [i]italic[/i], [u]underlined[/u]\r\n" +
+                "[size=18]large[/size], [font=Arial]font[/font], [color=#C00000]red[/color]\r\n\r\n" +
+                "Line per face example:\r\n" +
+                "[size=18][b]Face 1[/b][/size]\r\n" +
+                "[size=12]Face 2[/size]");
             Label faceTextFontLabel = new Label { AutoSize = true, Location = new Point(12, 92), Text = "Font:" };
             cmbFaceTextFont = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Location = new Point(48, 89), Size = new Size(116, 21) };
             Label faceTextSizeLabel = new Label { AutoSize = true, Location = new Point(169, 92), Text = "Size:" };
@@ -241,11 +251,12 @@ namespace TeddyBench
             cmbFaceTextAlignment = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Location = new Point(80, 150), Size = new Size(84, 21) };
             cmbFaceTextAlignment.Items.AddRange(new object[] { "Center", "Left", "Right" });
             cmbFaceTextAlignment.SelectedIndex = 0;
-            radFaceTextRepeat = new RadioButton { AutoSize = true, Location = new Point(12, 180), Text = "Repeat on every face", Checked = true };
-            radFaceTextWrapAround = new RadioButton { AutoSize = true, Location = new Point(12, 203), Text = "Wrap around" };
-            radFaceTextLinePerFace = new RadioButton { AutoSize = true, Location = new Point(12, 226), Text = "Line per face" };
-            Label faceTextStartLabel = new Label { AutoSize = true, Location = new Point(136, 228), Text = "Start at:" };
-            cmbFaceTextStartAt = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Location = new Point(192, 224), Size = new Size(45, 21), Enabled = false };
+            chkFaceTextFlipTopToBottom = new CheckBox { Appearance = Appearance.Button, Location = new Point(12, 175), Size = new Size(152, 23), Text = "Rotate 180°", TextAlign = ContentAlignment.MiddleCenter, Checked = true };
+            radFaceTextRepeat = new RadioButton { AutoSize = true, Location = new Point(12, 205), Text = "Repeat on every face", Checked = true };
+            radFaceTextWrapAround = new RadioButton { AutoSize = true, Location = new Point(12, 228), Text = "Wrap around" };
+            radFaceTextLinePerFace = new RadioButton { AutoSize = true, Location = new Point(12, 251), Text = "Line per face" };
+            Label faceTextStartLabel = new Label { AutoSize = true, Location = new Point(136, 253), Text = "Start at:" };
+            cmbFaceTextStartAt = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Location = new Point(192, 249), Size = new Size(45, 21), Enabled = false };
             for (int faceNumber = 1; faceNumber <= 6; faceNumber++)
             {
                 cmbFaceTextStartAt.Items.Add(faceNumber.ToString(CultureInfo.InvariantCulture));
@@ -256,6 +267,7 @@ namespace TeddyBench
             {
                 txtFaceText, faceTextFontLabel, cmbFaceTextFont, faceTextSizeLabel, cmbFaceTextFontSize,
                 btnFaceTextColor, pnlFaceTextColor, faceTextAlignmentLabel, cmbFaceTextAlignment,
+                chkFaceTextFlipTopToBottom,
                 radFaceTextRepeat, radFaceTextWrapAround, radFaceTextLinePerFace, faceTextStartLabel, cmbFaceTextStartAt
             });
 
@@ -504,6 +516,7 @@ namespace TeddyBench
             cmbFaceTextFontSize.SelectedIndexChanged += faceTextAppearanceChanged;
             btnFaceTextColor.Click += btnTextColor_Click;
             cmbFaceTextAlignment.SelectedIndexChanged += faceTextAppearanceChanged;
+            chkFaceTextFlipTopToBottom.CheckedChanged += faceTextAppearanceChanged;
             radFaceTextRepeat.CheckedChanged += faceTextAppearanceChanged;
             radFaceTextWrapAround.CheckedChanged += faceTextAppearanceChanged;
             radFaceTextLinePerFace.CheckedChanged += faceTextAppearanceChanged;
@@ -534,6 +547,7 @@ namespace TeddyBench
         {
             if (disposing)
             {
+                faceTextToolTip.Dispose();
                 foreach (HexagonDesign design in designs)
                 {
                     design.Dispose();
@@ -622,6 +636,7 @@ namespace TeddyBench
             design.FaceTextFontSize = GetSelectedFontSize(cmbFaceTextFontSize);
             design.FaceTextColor = pnlFaceTextColor.BackColor;
             design.FaceTextAlignment = cmbFaceTextAlignment.SelectedIndex;
+            design.FaceTextFlipTopToBottom = chkFaceTextFlipTopToBottom.Checked;
             design.FaceTextWrapAround = radFaceTextWrapAround.Checked;
             design.FaceTextLinePerFace = radFaceTextLinePerFace.Checked;
             design.FaceTextStartAt = cmbFaceTextStartAt.SelectedIndex + 1;
@@ -650,6 +665,7 @@ namespace TeddyBench
             design.FaceTextFontSize = GetSelectedFontSize(cmbFaceTextFontSize);
             design.FaceTextColor = pnlFaceTextColor.BackColor;
             design.FaceTextAlignment = cmbFaceTextAlignment.SelectedIndex;
+            design.FaceTextFlipTopToBottom = chkFaceTextFlipTopToBottom.Checked;
             design.FaceTextWrapAround = radFaceTextWrapAround.Checked;
             design.FaceTextLinePerFace = radFaceTextLinePerFace.Checked;
             design.FaceTextStartAt = cmbFaceTextStartAt.SelectedIndex + 1;
@@ -693,6 +709,7 @@ namespace TeddyBench
             SelectComboItem(cmbFaceTextFontSize, design.FaceTextFontSize.ToString(CultureInfo.InvariantCulture));
             pnlFaceTextColor.BackColor = design.FaceTextColor;
             cmbFaceTextAlignment.SelectedIndex = Math.Max(0, Math.Min(2, design.FaceTextAlignment));
+            chkFaceTextFlipTopToBottom.Checked = design.FaceTextFlipTopToBottom;
             radFaceTextLinePerFace.Checked = design.FaceTextLinePerFace;
             radFaceTextWrapAround.Checked = !design.FaceTextLinePerFace && design.FaceTextWrapAround;
             radFaceTextRepeat.Checked = !design.FaceTextLinePerFace && !design.FaceTextWrapAround;
@@ -1218,6 +1235,7 @@ namespace TeddyBench
                 FaceTextFontSize = design.FaceTextFontSize,
                 FaceTextColorArgb = design.FaceTextColor.ToArgb(),
                 FaceTextAlignment = design.FaceTextAlignment,
+                FaceTextFlipTopToBottom = design.FaceTextFlipTopToBottom,
                 FaceTextWrapAround = design.FaceTextWrapAround,
                 FaceTextLinePerFace = design.FaceTextLinePerFace,
                 FaceTextStartAt = design.FaceTextStartAt
@@ -1349,6 +1367,7 @@ namespace TeddyBench
                 FaceTextFontSize = savedDesign.FaceTextFontSize,
                 FaceTextColor = Color.FromArgb(savedDesign.FaceTextColorArgb),
                 FaceTextAlignment = savedDesign.FaceTextAlignment,
+                FaceTextFlipTopToBottom = savedDesign.FaceTextFlipTopToBottom,
                 FaceTextWrapAround = savedDesign.FaceTextWrapAround,
                 FaceTextLinePerFace = savedDesign.FaceTextLinePerFace,
                 FaceTextStartAt = savedDesign.FaceTextStartAt
@@ -1667,49 +1686,293 @@ namespace TeddyBench
             float faceWidth = side * scale;
             float faceTextHeight = faceHeight * scale;
 
-            using (Font textFont = CreateTextFont(design.FaceTextFontName, design.FaceTextFontSize, scale, graphics, isPhysicalOutput))
-            using (Brush textBrush = new SolidBrush(design.FaceTextColor))
-            using (StringFormat textFormat = new StringFormat(StringFormatFlags.NoWrap))
+            GraphicsState savedState = graphics.Save();
+            graphics.TranslateTransform(faceCenter.X, faceCenter.Y);
+            graphics.RotateTransform(angle);
+            if (design.FaceTextFlipTopToBottom)
             {
-                textFormat.Alignment = GetStringAlignment(design.FaceTextAlignment);
-                textFormat.LineAlignment = StringAlignment.Center;
-
-                GraphicsState savedState = graphics.Save();
-                graphics.TranslateTransform(faceCenter.X, faceCenter.Y);
-                graphics.RotateTransform(angle);
-                graphics.SetClip(new RectangleF(-faceWidth / 2f, -faceTextHeight / 2f, faceWidth, faceTextHeight), CombineMode.Intersect);
-
-                RectangleF textArea;
-                string textToDraw = design.FaceText;
-                if (design.FaceTextLinePerFace)
-                {
-                    int startFaceIndex = Math.Max(0, Math.Min(5, design.FaceTextStartAt - 1));
-                    int lineIndex = (faceIndex - startFaceIndex + 6) % 6;
-                    string[] lines = design.FaceText.Replace("\r\n", "\n").Replace('\r', '\n').Split(new[] { '\n' });
-                    textToDraw = lineIndex < lines.Length ? lines[lineIndex] : String.Empty;
-                    textArea = new RectangleF(-faceWidth / 2f, -faceTextHeight / 2f, faceWidth, faceTextHeight);
-                }
-                else if (design.FaceTextWrapAround)
-                {
-                    int startFaceIndex = Math.Max(0, Math.Min(5, design.FaceTextStartAt - 1));
-                    int positionInText = (faceIndex - startFaceIndex + 6) % 6;
-                    textArea = new RectangleF(
-                        -positionInText * faceWidth - faceWidth / 2f,
-                        -faceTextHeight / 2f,
-                        faceWidth * 6f,
-                        faceTextHeight);
-                }
-                else
-                {
-                    textArea = new RectangleF(-faceWidth / 2f, -faceTextHeight / 2f, faceWidth, faceTextHeight);
-                }
-
-                if (!String.IsNullOrEmpty(textToDraw))
-                {
-                    graphics.DrawString(textToDraw, textFont, textBrush, textArea, textFormat);
-                }
-                graphics.Restore(savedState);
+                graphics.RotateTransform(180f, MatrixOrder.Prepend);
             }
+            graphics.SetClip(new RectangleF(-faceWidth / 2f, -faceTextHeight / 2f, faceWidth, faceTextHeight), CombineMode.Intersect);
+
+            RectangleF textArea;
+            string textToDraw = design.FaceText;
+            if (design.FaceTextLinePerFace)
+            {
+                int startFaceIndex = Math.Max(0, Math.Min(5, design.FaceTextStartAt - 1));
+                int lineIndex = (faceIndex - startFaceIndex + 6) % 6;
+                string[] lines = design.FaceText.Replace("\r\n", "\n").Replace('\r', '\n').Split(new[] { '\n' });
+                textToDraw = lineIndex < lines.Length ? lines[lineIndex] : String.Empty;
+                textArea = new RectangleF(-faceWidth / 2f, -faceTextHeight / 2f, faceWidth, faceTextHeight);
+            }
+            else if (design.FaceTextWrapAround)
+            {
+                int startFaceIndex = Math.Max(0, Math.Min(5, design.FaceTextStartAt - 1));
+                int positionInText = (faceIndex - startFaceIndex + 6) % 6;
+                textArea = new RectangleF(
+                    -positionInText * faceWidth - faceWidth / 2f,
+                    -faceTextHeight / 2f,
+                    faceWidth * 6f,
+                    faceTextHeight);
+            }
+            else
+            {
+                textArea = new RectangleF(-faceWidth / 2f, -faceTextHeight / 2f, faceWidth, faceTextHeight);
+            }
+
+            if (!String.IsNullOrEmpty(textToDraw))
+            {
+                RichTextStyle defaultStyle = new RichTextStyle(design.FaceTextFontName, design.FaceTextFontSize, design.FaceTextColor);
+                DrawStyledFaceText(graphics, textToDraw, defaultStyle, textArea, GetStringAlignment(design.FaceTextAlignment), scale, isPhysicalOutput);
+            }
+            graphics.Restore(savedState);
+        }
+
+        private static void DrawStyledFaceText(Graphics graphics, string text, RichTextStyle defaultStyle, RectangleF textArea, StringAlignment alignment, float scale, bool isPhysicalOutput)
+        {
+            List<RichTextLine> lines = ParseStyledFaceText(text, defaultStyle);
+            if (lines.Count == 0)
+            {
+                return;
+            }
+
+            List<MeasuredRichTextLine> measuredLines = new List<MeasuredRichTextLine>();
+            try
+            {
+                float totalHeight = 0f;
+                foreach (RichTextLine line in lines)
+                {
+                    MeasuredRichTextLine measuredLine = new MeasuredRichTextLine();
+                    foreach (RichTextRun run in line.Runs)
+                    {
+                        Font font = CreateTextFont(run.Style.FontName, run.Style.FontSize, scale, graphics, isPhysicalOutput, run.Style.FontStyle);
+                        using (StringFormat measureFormat = CreateStyledTextFormat())
+                        {
+                            measuredLine.Runs.Add(new MeasuredRichTextRun(run, font, graphics.MeasureString(run.Text, font, PointF.Empty, measureFormat).Width));
+                        }
+                        measuredLine.Width += measuredLine.Runs[measuredLine.Runs.Count - 1].Width;
+                        measuredLine.Height = Math.Max(measuredLine.Height, font.GetHeight(graphics));
+                    }
+
+                    if (measuredLine.Runs.Count == 0)
+                    {
+                        using (Font font = CreateTextFont(defaultStyle.FontName, defaultStyle.FontSize, scale, graphics, isPhysicalOutput, defaultStyle.FontStyle))
+                        {
+                            measuredLine.Height = font.GetHeight(graphics);
+                        }
+                    }
+
+                    totalHeight += measuredLine.Height;
+                    measuredLines.Add(measuredLine);
+                }
+
+                float y = textArea.Y + (textArea.Height - totalHeight) / 2f;
+                foreach (MeasuredRichTextLine line in measuredLines)
+                {
+                    float x = textArea.X;
+                    if (alignment == StringAlignment.Center)
+                    {
+                        x += (textArea.Width - line.Width) / 2f;
+                    }
+                    else if (alignment == StringAlignment.Far)
+                    {
+                        x += textArea.Width - line.Width;
+                    }
+
+                    foreach (MeasuredRichTextRun run in line.Runs)
+                    {
+                        using (Brush brush = new SolidBrush(run.Run.Style.Color))
+                        using (StringFormat drawFormat = CreateStyledTextFormat())
+                        {
+                            graphics.DrawString(run.Run.Text, run.Font, brush, new PointF(x, y), drawFormat);
+                        }
+                        x += run.Width;
+                    }
+                    y += line.Height;
+                }
+            }
+            finally
+            {
+                foreach (MeasuredRichTextLine line in measuredLines)
+                {
+                    foreach (MeasuredRichTextRun run in line.Runs)
+                    {
+                        run.Font.Dispose();
+                    }
+                }
+            }
+        }
+
+        private static StringFormat CreateStyledTextFormat()
+        {
+            StringFormat format = new StringFormat(StringFormat.GenericTypographic);
+            format.FormatFlags |= StringFormatFlags.MeasureTrailingSpaces | StringFormatFlags.NoWrap;
+            return format;
+        }
+
+        private static List<RichTextLine> ParseStyledFaceText(string text, RichTextStyle defaultStyle)
+        {
+            List<RichTextRun> runs = new List<RichTextRun>();
+            List<RichTextTag> activeTags = new List<RichTextTag>();
+            int position = 0;
+            while (position < text.Length)
+            {
+                int tagStart = text.IndexOf('[', position);
+                if (tagStart < 0)
+                {
+                    AddRichTextRun(runs, text.Substring(position), GetRichTextStyle(defaultStyle, activeTags));
+                    break;
+                }
+
+                if (tagStart > position)
+                {
+                    AddRichTextRun(runs, text.Substring(position, tagStart - position), GetRichTextStyle(defaultStyle, activeTags));
+                }
+
+                int tagEnd = text.IndexOf(']', tagStart + 1);
+                if (tagEnd < 0)
+                {
+                    AddRichTextRun(runs, text.Substring(tagStart), GetRichTextStyle(defaultStyle, activeTags));
+                    break;
+                }
+
+                string tagText = text.Substring(tagStart + 1, tagEnd - tagStart - 1);
+                RichTextTag tag;
+                if (TryParseRichTextTag(tagText, out tag))
+                {
+                    activeTags.Add(tag);
+                }
+                else if (!TryCloseRichTextTag(tagText, activeTags))
+                {
+                    AddRichTextRun(runs, text.Substring(tagStart, tagEnd - tagStart + 1), GetRichTextStyle(defaultStyle, activeTags));
+                }
+                position = tagEnd + 1;
+            }
+
+            List<RichTextLine> lines = new List<RichTextLine> { new RichTextLine() };
+            foreach (RichTextRun run in runs)
+            {
+                string normalizedText = run.Text.Replace("\r\n", "\n").Replace('\r', '\n');
+                string[] parts = normalizedText.Split(new[] { '\n' });
+                for (int i = 0; i < parts.Length; i++)
+                {
+                    AddRichTextRun(lines[lines.Count - 1].Runs, parts[i], run.Style);
+                    if (i < parts.Length - 1)
+                    {
+                        lines.Add(new RichTextLine());
+                    }
+                }
+            }
+            return lines;
+        }
+
+        private static void AddRichTextRun(List<RichTextRun> runs, string text, RichTextStyle style)
+        {
+            if (String.IsNullOrEmpty(text))
+            {
+                return;
+            }
+            runs.Add(new RichTextRun(text, style));
+        }
+
+        private static RichTextStyle GetRichTextStyle(RichTextStyle defaultStyle, List<RichTextTag> activeTags)
+        {
+            RichTextStyle style = defaultStyle.Clone();
+            foreach (RichTextTag tag in activeTags)
+            {
+                if (tag.Name == "b")
+                {
+                    style.Bold = true;
+                }
+                else if (tag.Name == "i")
+                {
+                    style.Italic = true;
+                }
+                else if (tag.Name == "u")
+                {
+                    style.Underline = true;
+                }
+                else if (tag.Name == "size")
+                {
+                    style.FontSize = tag.Size;
+                }
+                else if (tag.Name == "font")
+                {
+                    style.FontName = tag.Value;
+                }
+                else if (tag.Name == "color")
+                {
+                    style.Color = tag.Color;
+                }
+            }
+            return style;
+        }
+
+        private static bool TryParseRichTextTag(string tagText, out RichTextTag tag)
+        {
+            tag = null;
+            string trimmedTag = tagText.Trim();
+            if (String.Equals(trimmedTag, "b", StringComparison.OrdinalIgnoreCase) ||
+                String.Equals(trimmedTag, "i", StringComparison.OrdinalIgnoreCase) ||
+                String.Equals(trimmedTag, "u", StringComparison.OrdinalIgnoreCase))
+            {
+                tag = new RichTextTag(trimmedTag.ToLowerInvariant());
+                return true;
+            }
+
+            int equalsIndex = trimmedTag.IndexOf('=');
+            if (equalsIndex <= 0)
+            {
+                return false;
+            }
+            string name = trimmedTag.Substring(0, equalsIndex).Trim().ToLowerInvariant();
+            string value = trimmedTag.Substring(equalsIndex + 1).Trim().Trim('"', '\'');
+            if (name == "size")
+            {
+                float size;
+                if (Single.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out size) && size >= 1f && size <= 200f)
+                {
+                    tag = new RichTextTag(name) { Size = size };
+                    return true;
+                }
+            }
+            else if (name == "font" && !String.IsNullOrWhiteSpace(value))
+            {
+                tag = new RichTextTag(name) { Value = value };
+                return true;
+            }
+            else if (name == "color")
+            {
+                try
+                {
+                    tag = new RichTextTag(name) { Color = ColorTranslator.FromHtml(value) };
+                    return true;
+                }
+                catch (Exception)
+                {
+                    return false;
+                }
+            }
+            return false;
+        }
+
+        private static bool TryCloseRichTextTag(string tagText, List<RichTextTag> activeTags)
+        {
+            string name = tagText.Trim();
+            if (!name.StartsWith("/", StringComparison.Ordinal) || name.Length == 1)
+            {
+                return false;
+            }
+            name = name.Substring(1).Trim().ToLowerInvariant();
+            for (int i = activeTags.Count - 1; i >= 0; i--)
+            {
+                if (activeTags[i].Name == name)
+                {
+                    activeTags.RemoveAt(i);
+                    return true;
+                }
+            }
+            return false;
         }
 
         private static StringAlignment GetStringAlignment(int selectedIndex)
@@ -1864,17 +2127,121 @@ namespace TeddyBench
 
         private static Font CreateTextFont(string fontName, int fontSize, float scale, Graphics graphics, bool isPhysicalOutput)
         {
+            return CreateTextFont(fontName, (float)fontSize, scale, graphics, isPhysicalOutput, FontStyle.Regular);
+        }
+
+        private static Font CreateTextFont(string fontName, float fontSize, float scale, Graphics graphics, bool isPhysicalOutput, FontStyle fontStyle)
+        {
             // Point sizes preserve their real-world dimensions on the printed
             // A4 page. On screen they are converted to the preview's scale.
             float drawSize = isPhysicalOutput ? fontSize : fontSize * scale * 25.4f / graphics.DpiY;
             try
             {
-                return new Font(fontName ?? SystemFonts.DefaultFont.FontFamily.Name, drawSize, FontStyle.Regular, GraphicsUnit.Point);
+                return new Font(fontName ?? SystemFonts.DefaultFont.FontFamily.Name, drawSize, fontStyle, GraphicsUnit.Point);
             }
             catch (ArgumentException)
             {
-                return new Font(SystemFonts.DefaultFont.FontFamily, drawSize, FontStyle.Regular, GraphicsUnit.Point);
+                return new Font(SystemFonts.DefaultFont.FontFamily, drawSize, fontStyle, GraphicsUnit.Point);
             }
+        }
+
+        private sealed class RichTextStyle
+        {
+            public string FontName;
+            public float FontSize;
+            public Color Color;
+            public bool Bold;
+            public bool Italic;
+            public bool Underline;
+
+            public FontStyle FontStyle
+            {
+                get
+                {
+                    FontStyle style = FontStyle.Regular;
+                    if (Bold)
+                    {
+                        style |= FontStyle.Bold;
+                    }
+                    if (Italic)
+                    {
+                        style |= FontStyle.Italic;
+                    }
+                    if (Underline)
+                    {
+                        style |= FontStyle.Underline;
+                    }
+                    return style;
+                }
+            }
+
+            public RichTextStyle(string fontName, float fontSize, Color color)
+            {
+                FontName = fontName;
+                FontSize = fontSize;
+                Color = color;
+            }
+
+            public RichTextStyle Clone()
+            {
+                return new RichTextStyle(FontName, FontSize, Color)
+                {
+                    Bold = Bold,
+                    Italic = Italic,
+                    Underline = Underline
+                };
+            }
+        }
+
+        private sealed class RichTextTag
+        {
+            public string Name;
+            public string Value;
+            public float Size;
+            public Color Color;
+
+            public RichTextTag(string name)
+            {
+                Name = name;
+            }
+        }
+
+        private sealed class RichTextRun
+        {
+            public string Text;
+            public RichTextStyle Style;
+
+            public RichTextRun(string text, RichTextStyle style)
+            {
+                Text = text;
+                Style = style;
+            }
+        }
+
+        private sealed class RichTextLine
+        {
+            public readonly List<RichTextRun> Runs = new List<RichTextRun>();
+        }
+
+        private sealed class MeasuredRichTextRun
+        {
+            public RichTextRun Run;
+            public Font Font;
+            public float Width;
+
+            public MeasuredRichTextRun(RichTextRun run, Font font, float width)
+            {
+                Run = run;
+                Font = font;
+                Width = width;
+            }
+        }
+
+        private sealed class MeasuredRichTextLine
+        {
+            public readonly List<MeasuredRichTextRun> Runs = new List<MeasuredRichTextRun>();
+            public float Width;
+            public float Height;
         }
 
         private sealed class TextLine
@@ -1935,6 +2302,7 @@ namespace TeddyBench
             [DataMember] public int FaceTextFontSize { get; set; }
             [DataMember] public int FaceTextColorArgb { get; set; }
             [DataMember] public int FaceTextAlignment { get; set; }
+            [DataMember] public bool FaceTextFlipTopToBottom { get; set; }
             [DataMember] public bool FaceTextWrapAround { get; set; }
             [DataMember] public bool FaceTextLinePerFace { get; set; }
             [DataMember] public int FaceTextStartAt { get; set; }
@@ -1968,6 +2336,7 @@ namespace TeddyBench
             public int FaceTextFontSize;
             public Color FaceTextColor;
             public int FaceTextAlignment;
+            public bool FaceTextFlipTopToBottom;
             public bool FaceTextWrapAround;
             public bool FaceTextLinePerFace;
             public int FaceTextStartAt;
@@ -2002,6 +2371,7 @@ namespace TeddyBench
                     FaceTextFontSize = FaceTextFontSize,
                     FaceTextColor = FaceTextColor,
                     FaceTextAlignment = FaceTextAlignment,
+                    FaceTextFlipTopToBottom = FaceTextFlipTopToBottom,
                     FaceTextWrapAround = FaceTextWrapAround,
                     FaceTextLinePerFace = FaceTextLinePerFace,
                     FaceTextStartAt = FaceTextStartAt
