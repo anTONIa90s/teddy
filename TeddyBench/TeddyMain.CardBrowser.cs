@@ -49,6 +49,7 @@ private void StartThreads()
                 try
                 {
                     var drives = DriveInfo.GetDrives();
+                    bool cardFound = false;
 
                     foreach (var drive in drives)
                     {
@@ -58,6 +59,7 @@ private void StartThreads()
                             {
                                 if (drive.IsReady && drive.RootDirectory.GetDirectories().Where(d => d.Name == "CONTENT").Count() == 1)
                                 {
+                                    cardFound = true;
                                     NotifyDrive(drive);
                                 }
                             }
@@ -65,6 +67,11 @@ private void StartThreads()
                             {
                             }
                         }
+                    }
+
+                    if (!cardFound && CurrentDirectory == null)
+                    {
+                        NotifyNoDrive();
                     }
 
                     if (CurrentDirectory != null)
@@ -135,6 +142,21 @@ private void StartThreads()
             }
         }
 
+        private void NotifyNoDrive()
+        {
+            if (this.InvokeRequired)
+            {
+                this.BeginInvoke(new Action(() => { NotifyNoDrive(); }));
+                return;
+            }
+
+            /* no SD card found: fall back to the backup directory, a card inserted later still takes over (AutoOpenDrive stays true) */
+            if (CurrentDirectory == null && AutoOpenDrive && !string.IsNullOrEmpty(Settings.BackupDirectory) && Directory.Exists(Settings.BackupDirectory))
+            {
+                OpenPath(Settings.BackupDirectory);
+            }
+        }
+
         private void openDirectoryToolStripMenuItem_Click(object sender, EventArgs e)
         {
             FolderBrowserDialog dlg = new FolderBrowserDialog();
@@ -142,6 +164,28 @@ private void StartThreads()
             if (dlg.ShowDialog() == DialogResult.OK)
             {
                 OpenPath(dlg.SelectedPath);
+            }
+        }
+
+        private void pickBackupDirectoryToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            FolderBrowserDialog dlg = new FolderBrowserDialog();
+            dlg.Description = "Directory to open when no SD card with a CONTENT folder is found";
+
+            if (!string.IsNullOrEmpty(Settings.BackupDirectory) && Directory.Exists(Settings.BackupDirectory))
+            {
+                dlg.SelectedPath = Settings.BackupDirectory;
+            }
+
+            if (dlg.ShowDialog() == DialogResult.OK)
+            {
+                Settings.BackupDirectory = dlg.SelectedPath;
+                SaveSettings();
+
+                if (CurrentDirectory == null)
+                {
+                    OpenPath(Settings.BackupDirectory);
+                }
             }
         }
 

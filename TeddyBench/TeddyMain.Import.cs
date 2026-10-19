@@ -31,80 +31,44 @@ namespace TeddyBench
     {
 private void btnAdd_Click(object sender, EventArgs e)
         {
-            OpenFileDialog dlg = new OpenFileDialog();
-            dlg.Multiselect = true;
-
-            if (dlg.ShowDialog() == DialogResult.OK)
-            {
-                AddFiles(dlg.FileNames);
-            }
+            AddFiles(null);
         }
 
+        /// <summary>
+        /// Shows the single "Add" dialog (files, order, UID, Audio-ID, Explorer title).
+        /// fileNames pre-fills the track list (drag and drop); null lets the dialog ask for files.
+        /// </summary>
         private void AddFiles(string[] fileNames)
         {
-            if (fileNames.Count() == 1 && !(fileNames[0].ToLower().EndsWith(".mp3") || fileNames[0].ToLower().EndsWith(".ogg")))
+            using (TrackSortDialog dialog = new TrackSortDialog(RfidReader, fileNames))
             {
-                AskUIDForm copyAsk = new AskUIDForm(RfidReader);
-                if (copyAsk.ShowDialog() != DialogResult.OK)
+                if (dialog.ShowDialog(this) != DialogResult.OK)
                 {
                     return;
                 }
 
-                string explorerTitle = AskForExplorerTitle();
+                if (!dialog.IsRawFile)
+                {
+                    EncodeFile(dialog.Uid, dialog.SortedFiles, dialog.AudioId, dialog.ExplorerTitle);
+                    return;
+                }
+
+                string fileName = dialog.SortedFiles[0];
 
                 try
                 {
-                    TonieAudio dumpFile = TonieAudio.FromFile(fileNames[0]);
+                    TonieAudio dumpFile = TonieAudio.FromFile(fileName);
 
                     if (dumpFile.FileContent.Length > 0)
                     {
                         string hash = BitConverter.ToString(dumpFile.Header.Hash).Replace("-", "");
-                        CopyFile(copyAsk.Uid, fileNames[0], explorerTitle, hash);
+                        CopyFile(dialog.Uid, fileName, dialog.ExplorerTitle, hash);
                     }
                 }
                 catch (Exception ex)
                 {
                     MessageBox.Show("The file you have chosen is not supported.", "Add file...");
                 }
-
-                return;
-            }
-
-            if (fileNames.Where(f => !(f.ToLower().EndsWith(".mp3") || f.ToLower().EndsWith(".ogg"))).Count() > 0)
-            {
-                MessageBox.Show("Please select MP3/Ogg files only.", "Add file...");
-                return;
-            }
-
-            TrackSortDialog sorter = new TrackSortDialog(fileNames);
-
-            if (sorter.ShowDialog() == DialogResult.Cancel)
-            {
-                return;
-            }
-
-            uint id = GetAudioID();
-            AskUIDForm encodeAsk = new AskUIDForm(RfidReader);
-            if (encodeAsk.ShowDialog() == DialogResult.OK)
-            {
-                EncodeFile(encodeAsk.Uid, sorter.SortedFiles, id, AskForExplorerTitle());
-            }
-        }
-
-        private string AskForExplorerTitle()
-        {
-            if (MessageBox.Show(
-                "Add title information for Windows Explorer?",
-                "Explorer title",
-                MessageBoxButtons.YesNo,
-                MessageBoxIcon.Question) != DialogResult.Yes)
-            {
-                return null;
-            }
-
-            using (ExplorerTitleDialog dialog = new ExplorerTitleDialog())
-            {
-                return dialog.ShowDialog(this) == DialogResult.OK ? dialog.ExplorerTitle : null;
             }
         }
 

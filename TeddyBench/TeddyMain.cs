@@ -153,7 +153,7 @@ namespace TeddyBench
             InitializeComponent();
             Log = new LogWindow();
 
-            Settings = Settings.FromFile("teddyBench.cfg");
+            Settings = Settings.FromFile(Settings.DefaultFile);
 
             lstTonies.LargeImageList = new ImageList();
             lstTonies.LargeImageList.ImageSize = new Size(128, 128);
@@ -191,7 +191,7 @@ namespace TeddyBench
 
         void SaveSettings()
         {
-            Settings.Save("teddyBench.cfg");
+            Settings.Save(Settings.DefaultFile);
         }
 
 
@@ -213,22 +213,6 @@ namespace TeddyBench
             {
                 AddFiles(drop);
             }
-        }
-
-        private uint GetAudioID()
-        {
-            if(MessageBox.Show("Do you want to set a specific Audio-ID? If you don't know, just say 'No'.", "Set specific Audio ID", MessageBoxButtons.YesNo) == DialogResult.No)
-            {
-                return uint.MaxValue;
-            }
-
-            AskHexForm form = new AskHexForm();
-            if(form.ShowDialog() != DialogResult.OK)
-            {
-                return uint.MaxValue;
-            }
-
-            return form.Value;
         }
 
         protected override void OnFormClosing(FormClosingEventArgs e)

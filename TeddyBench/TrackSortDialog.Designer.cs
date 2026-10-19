@@ -66,8 +66,8 @@
             // btnCancel
             // 
             this.btnCancel.DialogResult = System.Windows.Forms.DialogResult.Cancel;
-            this.btnCancel.Dock = System.Windows.Forms.DockStyle.Right;
-            this.btnCancel.Location = new System.Drawing.Point(733, 0);
+            this.btnCancel.Dock = System.Windows.Forms.DockStyle.Left;
+            this.btnCancel.Location = new System.Drawing.Point(0, 0);
             this.btnCancel.Name = "btnCancel";
             this.btnCancel.Size = new System.Drawing.Size(75, 26);
             this.btnCancel.TabIndex = 0;
@@ -78,7 +78,7 @@
             // 
             this.btnEncode.DialogResult = System.Windows.Forms.DialogResult.OK;
             this.btnEncode.Dock = System.Windows.Forms.DockStyle.Right;
-            this.btnEncode.Location = new System.Drawing.Point(658, 0);
+            this.btnEncode.Location = new System.Drawing.Point(733, 0);
             this.btnEncode.Name = "btnEncode";
             this.btnEncode.Size = new System.Drawing.Size(75, 26);
             this.btnEncode.TabIndex = 1;
@@ -87,11 +87,11 @@
             //
             // btnAddTracks
             //
-            this.btnAddTracks.Dock = System.Windows.Forms.DockStyle.Left;
-            this.btnAddTracks.Location = new System.Drawing.Point(0, 0);
+            this.btnAddTracks.Dock = System.Windows.Forms.DockStyle.Bottom;
+            this.btnAddTracks.Location = new System.Drawing.Point(0, 348);
             this.btnAddTracks.Name = "btnAddTracks";
-            this.btnAddTracks.Size = new System.Drawing.Size(75, 26);
-            this.btnAddTracks.TabIndex = 2;
+            this.btnAddTracks.Size = new System.Drawing.Size(85, 23);
+            this.btnAddTracks.TabIndex = 3;
             this.btnAddTracks.Text = "Add tracks";
             this.btnAddTracks.UseVisualStyleBackColor = true;
             this.btnAddTracks.Click += new System.EventHandler(this.btnAddTracks_Click);
@@ -113,9 +113,8 @@
             // 
             this.splitContainer1.Panel2.Controls.Add(this.btnEncode);
             this.splitContainer1.Panel2.Controls.Add(this.btnCancel);
-            this.splitContainer1.Panel2.Controls.Add(this.btnAddTracks);
-            this.splitContainer1.Size = new System.Drawing.Size(808, 401);
-            this.splitContainer1.SplitterDistance = 371;
+            this.splitContainer1.Size = new System.Drawing.Size(808, 500);
+            this.splitContainer1.SplitterDistance = 470;
             this.splitContainer1.TabIndex = 2;
             // 
             // splitContainer2
@@ -126,6 +125,7 @@
             //
             // splitContainer2.Panel1
             //
+            this.splitContainer2.Panel1.Controls.Add(this.btnAddTracks);
             this.splitContainer2.Panel1.Controls.Add(this.btnDelete);
             this.splitContainer2.Panel1.Controls.Add(this.btnDown);
             this.splitContainer2.Panel1.Controls.Add(this.btnUp);
@@ -211,13 +211,13 @@
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.CancelButton = this.btnCancel;
-            this.ClientSize = new System.Drawing.Size(808, 401);
+            this.ClientSize = new System.Drawing.Size(808, 500);
             this.Controls.Add(this.splitContainer1);
             this.DoubleBuffered = true;
             this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.SizableToolWindow;
             this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
             this.Name = "TrackSortDialog";
-            this.Text = "Sort your tracks";
+            this.Text = "Add tracks to a tag";
             this.splitContainer1.Panel1.ResumeLayout(false);
             this.splitContainer1.Panel2.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)(this.splitContainer1)).EndInit();

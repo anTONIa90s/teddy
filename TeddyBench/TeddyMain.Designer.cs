@@ -37,6 +37,7 @@ namespace TeddyBench
             this.menuStrip1 = new System.Windows.Forms.MenuStrip();
             this.fileToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.openDirectoryToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.pickBackupDirectoryToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.exitToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.nFCReaderToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.autodetectionEnabledToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
@@ -129,22 +130,30 @@ namespace TeddyBench
             // 
             this.fileToolStripMenuItem.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.openDirectoryToolStripMenuItem,
+            this.pickBackupDirectoryToolStripMenuItem,
             this.exitToolStripMenuItem});
             this.fileToolStripMenuItem.Name = "fileToolStripMenuItem";
             this.fileToolStripMenuItem.Size = new System.Drawing.Size(37, 20);
             this.fileToolStripMenuItem.Text = "&File";
-            // 
+            //
             // openDirectoryToolStripMenuItem
-            // 
+            //
             this.openDirectoryToolStripMenuItem.Name = "openDirectoryToolStripMenuItem";
-            this.openDirectoryToolStripMenuItem.Size = new System.Drawing.Size(154, 22);
+            this.openDirectoryToolStripMenuItem.Size = new System.Drawing.Size(198, 22);
             this.openDirectoryToolStripMenuItem.Text = "&Open Directory";
             this.openDirectoryToolStripMenuItem.Click += new System.EventHandler(this.openDirectoryToolStripMenuItem_Click);
-            // 
+            //
+            // pickBackupDirectoryToolStripMenuItem
+            //
+            this.pickBackupDirectoryToolStripMenuItem.Name = "pickBackupDirectoryToolStripMenuItem";
+            this.pickBackupDirectoryToolStripMenuItem.Size = new System.Drawing.Size(198, 22);
+            this.pickBackupDirectoryToolStripMenuItem.Text = "Pick &Backup Directory";
+            this.pickBackupDirectoryToolStripMenuItem.Click += new System.EventHandler(this.pickBackupDirectoryToolStripMenuItem_Click);
+            //
             // exitToolStripMenuItem
-            // 
+            //
             this.exitToolStripMenuItem.Name = "exitToolStripMenuItem";
-            this.exitToolStripMenuItem.Size = new System.Drawing.Size(154, 22);
+            this.exitToolStripMenuItem.Size = new System.Drawing.Size(198, 22);
             this.exitToolStripMenuItem.Text = "E&xit";
             this.exitToolStripMenuItem.Click += new System.EventHandler(this.exitToolStripMenuItem_Click);
             // 
@@ -757,6 +766,7 @@ namespace TeddyBench
         private System.Windows.Forms.MenuStrip menuStrip1;
         private System.Windows.Forms.ToolStripMenuItem fileToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem openDirectoryToolStripMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem pickBackupDirectoryToolStripMenuItem;
         private System.Windows.Forms.GroupBox grpCardContent;
         private System.Windows.Forms.SplitContainer splitContainer1;
         private System.Windows.Forms.Button btnDelete;
