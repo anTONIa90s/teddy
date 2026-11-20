@@ -165,8 +165,6 @@ namespace TeddyBench
             cmbSorting.SelectedIndex = 2;
             Text = TitleString;
 
-
-            StartThreads();
             autodetectionEnabledToolStripMenuItem.Checked = Settings.NfcEnabled;
             ReportForm.DefaultUsername = Settings.Username;
             UpdateNfcReader();
@@ -213,6 +211,15 @@ namespace TeddyBench
             {
                 AddFiles(drop);
             }
+        }
+
+        protected override void OnShown(EventArgs e)
+        {
+            base.OnShown(e);
+
+            /* start only once the window handle exists: before that InvokeRequired is false and the
+             * scan thread would fill lstTonies itself while the UI thread creates its handle */
+            StartThreads();
         }
 
         protected override void OnFormClosing(FormClosingEventArgs e)

@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Runtime.Serialization;
 using System.Runtime.Serialization.Json;
+using System.Text.RegularExpressions;
 using System.Windows.Forms;
 using Ph0rd.ColorSampler;
 
@@ -34,6 +35,11 @@ namespace TeddyBench
         private readonly CheckBox chkConnectFaces;
         private readonly NumericUpDown numHexagonCount;
         private readonly TabControl designTabs;
+        private readonly Button btnAddDesign;
+        private readonly Button btnImportDesign;
+        private readonly Button btnExportDesign;
+        private readonly Button btnDeleteDesign;
+        private readonly TextBox txtDesignName;
         private readonly Button btnLineColor;
         private readonly Panel pnlLineColor;
         private readonly NumericUpDown numLineThickness;
@@ -98,21 +104,26 @@ namespace TeddyBench
         private bool loadingLayout;
         private int activeDesignIndex;
         private readonly List<HexagonDesign> designs = new List<HexagonDesign>();
+        private readonly Dictionary<string, Image> textImages = new Dictionary<string, Image>(StringComparer.OrdinalIgnoreCase);
+        private string layoutDirectory;
+        private int draggedTabIndex = -1;
+        private const string DesignFileFilter = "Hexagon design (*.hexagon)|*.hexagon|All files (*.*)|*.*";
         private Sampler activeColorSampler;
 
         public HexPrismNetForm()
         {
             Text = "Hexagonal prism net";
             StartPosition = FormStartPosition.CenterParent;
-            MinimumSize = new Size(780, 690);
-            Size = new Size(920, 740);
-            faceTextToolTip = new ToolTip();
+            WindowState = FormWindowState.Maximized;
+            MinimumSize = new Size(820, 690);
+            Size = new Size(960, 740);
+            faceTextToolTip = new ToolTip { AutoPopDelay = 30000, InitialDelay = 100 };
 
             Panel settingsPanel = new Panel
             {
                 Dock = DockStyle.Left,
                 Padding = new Padding(14),
-                Width = 275,
+                Width = 310,
                 AutoScroll = true
             };
 
@@ -122,6 +133,15 @@ namespace TeddyBench
                 Dock = DockStyle.Top,
                 Height = 50,
                 Text = "Enter one hexagon measurement and the height of each lateral face. All dimensions are in millimetres. The net is printed at true size on A4."
+            };
+            // Fit the label to its wrapped text so no gap is left below it.
+            instructions.Resize += delegate
+            {
+                int height = TextRenderer.MeasureText(instructions.Text, instructions.Font, new Size(Math.Max(1, instructions.Width), Int32.MaxValue), TextFormatFlags.WordBreak).Height;
+                if (instructions.Height != height)
+                {
+                    instructions.Height = height;
+                }
             };
 
             GroupBox hexGroup = new GroupBox
@@ -137,7 +157,30 @@ namespace TeddyBench
             txtHexValue = new TextBox { Location = new Point(103, 102), Size = new Size(115, 20), Text = Format(sideLengthMm), TextAlign = HorizontalAlignment.Right };
             hexGroup.Controls.AddRange(new Control[] { radSideLength, radVertexDiameter, radEdgeDiameter, valueLabel, txtHexValue });
 
-            designTabs = new TabControl { Dock = DockStyle.Top, Height = 30 };
+            designTabs = new TabControl { Dock = DockStyle.Fill };
+            btnAddDesign = new Button { Size = new Size(26, 23), Margin = new Padding(2, 2, 0, 0), Text = "+" };
+            btnImportDesign = new Button { AutoSize = true, Margin = new Padding(2, 2, 0, 0), Text = "Import..." };
+            FlowLayoutPanel designTabButtons = new FlowLayoutPanel { Dock = DockStyle.Right, AutoSize = true, WrapContents = false, Padding = Padding.Empty };
+            designTabButtons.Controls.AddRange(new Control[] { btnAddDesign, btnImportDesign });
+            Panel designTabHeader = new Panel { Dock = DockStyle.Top, Height = 30 };
+            // The Fill control is added first so the Right panel docks before it.
+            designTabHeader.Controls.Add(designTabs);
+            designTabHeader.Controls.Add(designTabButtons);
+
+            btnExportDesign = new Button { AutoSize = true, Text = "Export..." };
+            btnDeleteDesign = new Button { AutoSize = true, Text = "Delete" };
+            FlowLayoutPanel designToolbar = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 31, WrapContents = false };
+            designToolbar.Controls.AddRange(new Control[] { btnExportDesign, btnDeleteDesign });
+
+            Panel designNameRow = new Panel { Dock = DockStyle.Top, Height = 28, Width = 240 };
+            Label designNameLabel = new Label { AutoSize = true, Location = new Point(3, 6), Text = "Name:" };
+            txtDesignName = new TextBox { Location = new Point(48, 3), Size = new Size(189, 20), Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
+            designNameRow.Controls.AddRange(new Control[] { designNameLabel, txtDesignName });
+            faceTextToolTip.SetToolTip(txtDesignName, "Leave empty to use the numbered name");
+            faceTextToolTip.SetToolTip(btnAddDesign, "Add a hexagon (copy of the selected one)");
+            faceTextToolTip.SetToolTip(btnImportDesign, "Import a single hexagon design as a new hexagon");
+            faceTextToolTip.SetToolTip(btnExportDesign, "Export the selected hexagon design");
+            faceTextToolTip.SetToolTip(designTabs, "Drag a tab to change the order");
 
             GroupBox faceGroup = new GroupBox
             {
@@ -234,11 +277,8 @@ namespace TeddyBench
                 WordWrap = false,
                 ScrollBars = ScrollBars.Both
             };
-            faceTextToolTip.SetToolTip(txtFaceText,
-                "Use BBCode-style tags for inline formatting.\r\n" +
-                "[b]bold[/b], [i]italic[/i], [u]underlined[/u]\r\n" +
-                "[size=18]large[/size], [font=Arial]font[/font], [color=#C00000]red[/color]\r\n\r\n" +
-                "Line per face example:\r\n" +
+            Label faceTextHelp = CreateHelpIcon(StyledTextHelp +
+                "\r\n\r\nLine per face example:\r\n" +
                 "[size=18][b]Face 1[/b][/size]\r\n" +
                 "[size=12]Face 2[/size]");
             Label faceTextFontLabel = new Label { AutoSize = true, Location = new Point(12, 92), Text = "Font:" };
@@ -252,6 +292,7 @@ namespace TeddyBench
             cmbFaceTextAlignment.Items.AddRange(new object[] { "Center", "Left", "Right" });
             cmbFaceTextAlignment.SelectedIndex = 0;
             chkFaceTextFlipTopToBottom = new CheckBox { Appearance = Appearance.Button, Location = new Point(12, 175), Size = new Size(152, 23), Text = "Rotate 180°", TextAlign = ContentAlignment.MiddleCenter, Checked = true };
+            Button btnInsertFaceTextImage = CreateInsertImageButton(new Point(170, 175), txtFaceText);
             radFaceTextRepeat = new RadioButton { AutoSize = true, Location = new Point(12, 205), Text = "Repeat on every face", Checked = true };
             radFaceTextWrapAround = new RadioButton { AutoSize = true, Location = new Point(12, 228), Text = "Wrap around" };
             radFaceTextLinePerFace = new RadioButton { AutoSize = true, Location = new Point(12, 251), Text = "Line per face" };
@@ -265,9 +306,9 @@ namespace TeddyBench
             PopulateFontOptions(cmbFaceTextFont, cmbFaceTextFontSize, 10);
             faceTextGroup.Controls.AddRange(new Control[]
             {
-                txtFaceText, faceTextFontLabel, cmbFaceTextFont, faceTextSizeLabel, cmbFaceTextFontSize,
+                faceTextHelp, txtFaceText, faceTextFontLabel, cmbFaceTextFont, faceTextSizeLabel, cmbFaceTextFontSize,
                 btnFaceTextColor, pnlFaceTextColor, faceTextAlignmentLabel, cmbFaceTextAlignment,
-                chkFaceTextFlipTopToBottom,
+                chkFaceTextFlipTopToBottom, btnInsertFaceTextImage,
                 radFaceTextRepeat, radFaceTextWrapAround, radFaceTextLinePerFace, faceTextStartLabel, cmbFaceTextStartAt
             });
 
@@ -319,11 +360,25 @@ namespace TeddyBench
                 Size = new Size(69, 20),
                 DecimalPlaces = 2,
                 Increment = 0.05m,
-                Minimum = 0.05m,
+                Minimum = 0m,
                 Maximum = 10m,
                 Value = 0.35m
             };
+            faceTextToolTip.SetToolTip(numLineThickness, "0 draws no lines");
             lineStyleGroup.Controls.AddRange(new Control[] { btnLineColor, pnlLineColor, thicknessLabel, numLineThickness });
+            Action arrangeLineStyle = () =>
+            {
+                if (wideLayoutActive)
+                {
+                    thicknessLabel.Location = new Point(170, 25);
+                    numLineThickness.Location = new Point(263, 21);
+                }
+                else
+                {
+                    thicknessLabel.Location = new Point(12, 53);
+                    numLineThickness.Location = new Point(105, 49);
+                }
+            };
 
             lblConversions = new Label
             {
@@ -344,7 +399,14 @@ namespace TeddyBench
             btnPrint = new Button { AutoSize = true, Text = "Print...", Enabled = false };
             btnLoadLayout = new Button { AutoSize = true, Text = "Load layout..." };
             btnSaveLayout = new Button { AutoSize = true, Text = "Save layout..." };
-            buttons.Controls.AddRange(new Control[] { btnLoadLayout, btnSaveLayout, btnCreate, btnPrint });
+            buttons.Controls.AddRange(new Control[] { btnCreate, btnPrint });
+            FlowLayoutPanel layoutButtons = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Top,
+                Height = 33,
+                FlowDirection = FlowDirection.LeftToRight
+            };
+            layoutButtons.Controls.AddRange(new Control[] { btnLoadLayout, btnSaveLayout });
 
             TableLayoutPanel generalSettingsLayout = new TableLayoutPanel
             {
@@ -367,7 +429,7 @@ namespace TeddyBench
                 generalSettingsLayout.ColumnStyles.Clear();
                 generalSettingsLayout.RowStyles.Clear();
                 generalSettingsLayout.ColumnCount = wideLayout ? 2 : 1;
-                generalSettingsLayout.RowCount = wideLayout ? 3 : 5;
+                generalSettingsLayout.RowCount = wideLayout ? 2 : 4;
                 for (int column = 0; column < generalSettingsLayout.ColumnCount; column++)
                 {
                     generalSettingsLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f / generalSettingsLayout.ColumnCount));
@@ -375,29 +437,24 @@ namespace TeddyBench
                 if (wideLayout)
                 {
                     generalSettingsLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 155));
-                    generalSettingsLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 82));
-                    generalSettingsLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 55));
-                    generalSettingsLayout.Height = 292;
+                    generalSettingsLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
+                    generalSettingsLayout.Height = 227;
                     generalSettingsLayout.Controls.Add(hexGroup, 0, 0);
                     generalSettingsLayout.Controls.Add(faceGroup, 1, 0);
                     generalSettingsLayout.Controls.Add(orientationGroup, 0, 1);
-                    generalSettingsLayout.Controls.Add(lineStyleGroup, 1, 1);
-                    generalSettingsLayout.Controls.Add(countGroup, 0, 2);
-                    generalSettingsLayout.SetColumnSpan(countGroup, 2);
+                    generalSettingsLayout.Controls.Add(countGroup, 1, 1);
                 }
                 else
                 {
                     generalSettingsLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 155));
                     generalSettingsLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 110));
                     generalSettingsLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
-                    generalSettingsLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 82));
                     generalSettingsLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 55));
-                    generalSettingsLayout.Height = 474;
+                    generalSettingsLayout.Height = 392;
                     generalSettingsLayout.Controls.Add(hexGroup, 0, 0);
                     generalSettingsLayout.Controls.Add(faceGroup, 0, 1);
                     generalSettingsLayout.Controls.Add(orientationGroup, 0, 2);
-                    generalSettingsLayout.Controls.Add(lineStyleGroup, 0, 3);
-                    generalSettingsLayout.Controls.Add(countGroup, 0, 4);
+                    generalSettingsLayout.Controls.Add(countGroup, 0, 3);
                 }
                 generalSettingsLayout.ResumeLayout();
 
@@ -406,42 +463,47 @@ namespace TeddyBench
                 hexagonDesignLayout.ColumnStyles.Clear();
                 hexagonDesignLayout.RowStyles.Clear();
                 hexagonDesignLayout.ColumnCount = wideLayout ? 2 : 1;
-                hexagonDesignLayout.RowCount = wideLayout ? 4 : 6;
+                hexagonDesignLayout.RowCount = wideLayout ? 5 : 7;
                 for (int column = 0; column < hexagonDesignLayout.ColumnCount; column++)
                 {
                     hexagonDesignLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f / hexagonDesignLayout.ColumnCount));
                 }
                 if (wideLayout)
                 {
+                    hexagonDesignLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 55));
                     hexagonDesignLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 152));
                     hexagonDesignLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 152));
                     hexagonDesignLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 80));
                     hexagonDesignLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 138));
-                    hexagonDesignLayout.Height = 522;
-                    hexagonDesignLayout.Controls.Add(headerGroup, 0, 0);
-                    hexagonDesignLayout.Controls.Add(subtextGroup, 0, 1);
-                    hexagonDesignLayout.Controls.Add(faceTextGroup, 1, 0);
+                    hexagonDesignLayout.Height = 577;
+                    hexagonDesignLayout.Controls.Add(lineStyleGroup, 0, 0);
+                    hexagonDesignLayout.SetColumnSpan(lineStyleGroup, 2);
+                    hexagonDesignLayout.Controls.Add(headerGroup, 0, 1);
+                    hexagonDesignLayout.Controls.Add(subtextGroup, 0, 2);
+                    hexagonDesignLayout.Controls.Add(faceTextGroup, 1, 1);
                     hexagonDesignLayout.SetRowSpan(faceTextGroup, 2);
-                    hexagonDesignLayout.Controls.Add(backgroundColorGroup, 0, 2);
+                    hexagonDesignLayout.Controls.Add(backgroundColorGroup, 0, 3);
                     hexagonDesignLayout.SetColumnSpan(backgroundColorGroup, 2);
-                    hexagonDesignLayout.Controls.Add(imageGroup, 0, 3);
-                    hexagonDesignLayout.Controls.Add(faceImageGroup, 1, 3);
+                    hexagonDesignLayout.Controls.Add(imageGroup, 0, 4);
+                    hexagonDesignLayout.Controls.Add(faceImageGroup, 1, 4);
                 }
                 else
                 {
+                    hexagonDesignLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 82));
                     hexagonDesignLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 152));
                     hexagonDesignLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 152));
-                    hexagonDesignLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 267));
+                    hexagonDesignLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 280));
                     hexagonDesignLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 80));
                     hexagonDesignLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 138));
                     hexagonDesignLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 138));
-                    hexagonDesignLayout.Height = 927;
-                    hexagonDesignLayout.Controls.Add(headerGroup, 0, 0);
-                    hexagonDesignLayout.Controls.Add(subtextGroup, 0, 1);
-                    hexagonDesignLayout.Controls.Add(faceTextGroup, 0, 2);
-                    hexagonDesignLayout.Controls.Add(backgroundColorGroup, 0, 3);
-                    hexagonDesignLayout.Controls.Add(imageGroup, 0, 4);
-                    hexagonDesignLayout.Controls.Add(faceImageGroup, 0, 5);
+                    hexagonDesignLayout.Height = 1022;
+                    hexagonDesignLayout.Controls.Add(lineStyleGroup, 0, 0);
+                    hexagonDesignLayout.Controls.Add(headerGroup, 0, 1);
+                    hexagonDesignLayout.Controls.Add(subtextGroup, 0, 2);
+                    hexagonDesignLayout.Controls.Add(faceTextGroup, 0, 3);
+                    hexagonDesignLayout.Controls.Add(backgroundColorGroup, 0, 4);
+                    hexagonDesignLayout.Controls.Add(imageGroup, 0, 5);
+                    hexagonDesignLayout.Controls.Add(faceImageGroup, 0, 6);
                 }
                 hexagonDesignLayout.ResumeLayout();
 
@@ -455,19 +517,23 @@ namespace TeddyBench
                     group.Margin = Padding.Empty;
                 }
                 arrangeBackgroundColors();
-                settingsPanel.Width = wideLayout ? Math.Min(580, Math.Max(520, ClientSize.Width / 3)) : 275;
+                arrangeLineStyle();
+                settingsPanel.Width = wideLayout ? Math.Min(640, Math.Max(600, ClientSize.Width / 3)) : 310;
             };
 
             configureResponsiveLayout(false);
 
             // Docked controls are added in reverse display order.
-            settingsPanel.Controls.Add(buttons);
             settingsPanel.Controls.Add(lblConversions);
             settingsPanel.Controls.Add(hexagonDesignLayout);
-            settingsPanel.Controls.Add(designTabs);
+            settingsPanel.Controls.Add(designToolbar);
+            settingsPanel.Controls.Add(designNameRow);
+            settingsPanel.Controls.Add(designTabHeader);
             settingsPanel.Controls.Add(designSettingsLabel);
             settingsPanel.Controls.Add(generalSettingsLayout);
             settingsPanel.Controls.Add(generalSettingsLabel);
+            settingsPanel.Controls.Add(buttons);
+            settingsPanel.Controls.Add(layoutButtons);
             settingsPanel.Controls.Add(instructions);
 
             preview = new NetPreviewPanel
@@ -494,6 +560,14 @@ namespace TeddyBench
             chkConnectFaces.CheckedChanged += lineStyleChanged;
             numHexagonCount.ValueChanged += numHexagonCount_ValueChanged;
             designTabs.SelectedIndexChanged += designTabs_SelectedIndexChanged;
+            designTabs.MouseDown += designTabs_MouseDown;
+            designTabs.MouseMove += designTabs_MouseMove;
+            designTabs.MouseUp += designTabs_MouseUp;
+            btnAddDesign.Click += btnAddDesign_Click;
+            btnImportDesign.Click += btnImportDesign_Click;
+            btnExportDesign.Click += btnExportDesign_Click;
+            btnDeleteDesign.Click += btnDeleteDesign_Click;
+            txtDesignName.TextChanged += txtDesignName_TextChanged;
             radStandsOnVertex.CheckedChanged += orientationChanged;
             radStandsOnEdge.CheckedChanged += orientationChanged;
             txtHeader.TextChanged += textAppearanceChanged;
@@ -552,6 +626,11 @@ namespace TeddyBench
                 {
                     design.Dispose();
                 }
+                foreach (Image image in textImages.Values)
+                {
+                    image.Dispose();
+                }
+                textImages.Clear();
             }
             base.Dispose(disposing);
         }
@@ -567,7 +646,12 @@ namespace TeddyBench
             int requestedCount = (int)numHexagonCount.Value;
             while (designs.Count < requestedCount)
             {
-                designs.Add(designs[activeDesignIndex].Clone());
+                HexagonDesign copy = designs[activeDesignIndex].Clone();
+                if (!String.IsNullOrWhiteSpace(copy.Name))
+                {
+                    copy.Name += " (copy)";
+                }
+                designs.Add(copy);
             }
             while (designs.Count > requestedCount)
             {
@@ -602,10 +686,225 @@ namespace TeddyBench
             designTabs.TabPages.Clear();
             for (int i = 0; i < designs.Count; i++)
             {
-                designTabs.TabPages.Add("Hexagon " + (i + 1));
+                designTabs.TabPages.Add(GetDesignTitle(i));
             }
             designTabs.SelectedIndex = activeDesignIndex;
             loadingDesign = false;
+            UpdateDesignButtons();
+        }
+
+        private string GetDesignTitle(int index)
+        {
+            string name = designs[index].Name;
+            return String.IsNullOrWhiteSpace(name) ? "Hexagon " + (index + 1) : name.Trim();
+        }
+
+        private void UpdateDesignTabTitles()
+        {
+            for (int i = 0; i < designTabs.TabCount && i < designs.Count; i++)
+            {
+                string title = GetDesignTitle(i);
+                if (designTabs.TabPages[i].Text != title)
+                {
+                    designTabs.TabPages[i].Text = title;
+                }
+            }
+        }
+
+        private void txtDesignName_TextChanged(object sender, EventArgs e)
+        {
+            if (loadingDesign)
+            {
+                return;
+            }
+
+            SaveActiveDesign();
+            UpdateDesignTabTitles();
+        }
+
+        private void UpdateDesignButtons()
+        {
+            bool canAdd = designs.Count < (int)numHexagonCount.Maximum;
+            btnAddDesign.Enabled = canAdd;
+            btnImportDesign.Enabled = canAdd;
+            btnDeleteDesign.Enabled = designs.Count > 1;
+        }
+
+        private void btnAddDesign_Click(object sender, EventArgs e)
+        {
+            if (numHexagonCount.Value >= numHexagonCount.Maximum)
+            {
+                return;
+            }
+
+            // The count handler appends a copy of the active design.
+            numHexagonCount.Value++;
+            designTabs.SelectedIndex = designs.Count - 1;
+        }
+
+        private void btnDeleteDesign_Click(object sender, EventArgs e)
+        {
+            if (designs.Count <= 1)
+            {
+                return;
+            }
+
+            HexagonDesign removedDesign = designs[activeDesignIndex];
+            designs.RemoveAt(activeDesignIndex);
+            removedDesign.Dispose();
+            activeDesignIndex = Math.Min(activeDesignIndex, designs.Count - 1);
+            SetDesignCount();
+            RebuildDesignTabs();
+            LoadActiveDesign();
+            UpdateA4Layout();
+            preview.Invalidate();
+        }
+
+        // Updates the count control without letting its handler add or remove designs.
+        private void SetDesignCount()
+        {
+            bool wasLoadingLayout = loadingLayout;
+            loadingLayout = true;
+            try
+            {
+                numHexagonCount.Value = designs.Count;
+            }
+            finally
+            {
+                loadingLayout = wasLoadingLayout;
+            }
+        }
+
+        private void btnExportDesign_Click(object sender, EventArgs e)
+        {
+            SaveActiveDesign();
+            using (SaveFileDialog dialog = new SaveFileDialog())
+            {
+                dialog.Filter = DesignFileFilter;
+                dialog.DefaultExt = "hexagon";
+                dialog.AddExtension = true;
+                dialog.FileName = String.Join("_", GetDesignTitle(activeDesignIndex).Split(Path.GetInvalidFileNameChars()));
+                if (dialog.ShowDialog(this) != DialogResult.OK)
+                {
+                    return;
+                }
+
+                try
+                {
+                    DataContractJsonSerializer serializer = new DataContractJsonSerializer(typeof(NetDesignFile));
+                    using (FileStream stream = File.Create(dialog.FileName))
+                    {
+                        serializer.WriteObject(stream, CreateDesignFile(designs[activeDesignIndex]));
+                    }
+                }
+                catch (Exception exception)
+                {
+                    MessageBox.Show(this, "The hexagon could not be exported.\r\n\r\n" + exception.Message, "Export hexagon", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+            }
+        }
+
+        private void btnImportDesign_Click(object sender, EventArgs e)
+        {
+            if (designs.Count >= (int)numHexagonCount.Maximum)
+            {
+                MessageBox.Show(this, "No more hexagons fit on one A4 page with the current measurements.", "Import hexagon", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            using (OpenFileDialog dialog = new OpenFileDialog())
+            {
+                dialog.Filter = DesignFileFilter;
+                if (dialog.ShowDialog(this) != DialogResult.OK)
+                {
+                    return;
+                }
+
+                HexagonDesign importedDesign;
+                try
+                {
+                    NetDesignFile savedDesign;
+                    DataContractJsonSerializer serializer = new DataContractJsonSerializer(typeof(NetDesignFile));
+                    using (FileStream stream = File.OpenRead(dialog.FileName))
+                    {
+                        savedDesign = (NetDesignFile)serializer.ReadObject(stream);
+                    }
+                    NetLayoutFile defaults = new NetLayoutFile { LineColorArgb = Color.Gray.ToArgb(), LineThickness = 0.35m };
+                    importedDesign = CreateDesignFromFile(savedDesign, defaults, Path.GetDirectoryName(dialog.FileName));
+                }
+                catch (Exception exception)
+                {
+                    MessageBox.Show(this, "The hexagon could not be imported.\r\n\r\n" + exception.Message, "Import hexagon", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
+
+                SaveActiveDesign();
+                designs.Add(importedDesign);
+                activeDesignIndex = designs.Count - 1;
+                SetDesignCount();
+                RebuildDesignTabs();
+                LoadActiveDesign();
+                UpdateA4Layout();
+                preview.Invalidate();
+            }
+        }
+
+        private int GetTabIndexAt(Point location)
+        {
+            for (int i = 0; i < designTabs.TabCount; i++)
+            {
+                if (designTabs.GetTabRect(i).Contains(location))
+                {
+                    return i;
+                }
+            }
+            return -1;
+        }
+
+        private void designTabs_MouseDown(object sender, MouseEventArgs e)
+        {
+            draggedTabIndex = e.Button == MouseButtons.Left ? GetTabIndexAt(e.Location) : -1;
+        }
+
+        private void designTabs_MouseMove(object sender, MouseEventArgs e)
+        {
+            if (draggedTabIndex < 0 || e.Button != MouseButtons.Left)
+            {
+                return;
+            }
+
+            int targetIndex = GetTabIndexAt(e.Location);
+            if (targetIndex < 0 || targetIndex == draggedTabIndex)
+            {
+                return;
+            }
+
+            // Only move once the pointer has crossed the target tab's midpoint,
+            // so tabs of different widths do not swap back and forth.
+            Rectangle targetRect = designTabs.GetTabRect(targetIndex);
+            int midpoint = targetRect.Left + targetRect.Width / 2;
+            if ((targetIndex > draggedTabIndex && e.X < midpoint) || (targetIndex < draggedTabIndex && e.X > midpoint))
+            {
+                return;
+            }
+
+            SaveActiveDesign();
+            HexagonDesign activeDesign = designs[activeDesignIndex];
+            HexagonDesign movedDesign = designs[draggedTabIndex];
+            designs.RemoveAt(draggedTabIndex);
+            designs.Insert(targetIndex, movedDesign);
+            activeDesignIndex = designs.IndexOf(activeDesign);
+            draggedTabIndex = targetIndex;
+            loadingDesign = true;
+            UpdateDesignTabTitles();
+            designTabs.SelectedIndex = activeDesignIndex;
+            loadingDesign = false;
+            preview.Invalidate();
+        }
+
+        private void designTabs_MouseUp(object sender, MouseEventArgs e)
+        {
+            draggedTabIndex = -1;
         }
 
         private void SaveActiveDesign()
@@ -616,6 +915,9 @@ namespace TeddyBench
             }
 
             HexagonDesign design = designs[activeDesignIndex];
+            design.Name = txtDesignName.Text;
+            design.LineColor = lineColor;
+            design.LineThickness = numLineThickness.Value;
             design.HeaderText = txtHeader.Text;
             design.HeaderFontName = cmbHeaderFont.SelectedItem as string;
             design.HeaderFontSize = GetSelectedFontSize(cmbHeaderFontSize);
@@ -645,6 +947,9 @@ namespace TeddyBench
         private HexagonDesign ReadDesignFromEditor()
         {
             HexagonDesign design = new HexagonDesign();
+            design.Name = txtDesignName.Text;
+            design.LineColor = lineColor;
+            design.LineThickness = numLineThickness.Value;
             design.HeaderText = txtHeader.Text;
             design.HeaderFontName = cmbHeaderFont.SelectedItem as string;
             design.HeaderFontSize = GetSelectedFontSize(cmbHeaderFontSize);
@@ -681,6 +986,10 @@ namespace TeddyBench
 
             HexagonDesign design = designs[activeDesignIndex];
             loadingDesign = true;
+            txtDesignName.Text = design.Name ?? String.Empty;
+            lineColor = design.LineColor;
+            pnlLineColor.BackColor = lineColor;
+            numLineThickness.Value = Math.Max(numLineThickness.Minimum, Math.Min(numLineThickness.Maximum, design.LineThickness));
             txtHeader.Text = design.HeaderText;
             SelectComboItem(cmbHeaderFont, design.HeaderFontName);
             SelectComboItem(cmbHeaderFontSize, design.HeaderFontSize.ToString(CultureInfo.InvariantCulture));
@@ -806,6 +1115,65 @@ namespace TeddyBench
             cmbFaceTextStartAt.Enabled = radFaceTextWrapAround.Checked || radFaceTextLinePerFace.Checked;
         }
 
+        private const string StyledTextHelp =
+            "Use BBCode-style tags for inline formatting.\r\n" +
+            "[b]bold[/b], [i]italic[/i], [u]underlined[/u]\r\n" +
+            "[size=18]large[/size], [font=Arial]font[/font], [color=#C00000]red[/color]\r\n\r\n" +
+            "Insert images with HTML. By default an image is as high as the text:\r\n" +
+            "<img src=\"C:\\Pictures\\star.png\">\r\n" +
+            "<img src=\"star.png\" height=\"8mm\">  (height/width in pt or mm)";
+
+        // A small "?" for the top-right corner of a GroupBox. The group is
+        // 200 wide until it is docked; Anchor keeps the icon in the corner.
+        private Label CreateHelpIcon(string helpText)
+        {
+            Label help = new Label
+            {
+                AutoSize = false,
+                Location = new Point(200 - 22, 0),
+                Size = new Size(16, 16),
+                Anchor = AnchorStyles.Top | AnchorStyles.Right,
+                Text = "?",
+                TextAlign = ContentAlignment.MiddleCenter,
+                Font = new Font(Font, FontStyle.Bold),
+                ForeColor = SystemColors.HotTrack,
+                BorderStyle = BorderStyle.FixedSingle,
+                Cursor = Cursors.Help
+            };
+            faceTextToolTip.SetToolTip(help, helpText);
+            help.Click += delegate
+            {
+                faceTextToolTip.Show(helpText, help, 0, help.Height, 30000);
+            };
+            return help;
+        }
+
+        private Button CreateInsertImageButton(Point location, TextBox target)
+        {
+            Button button = new Button { Location = location, Size = new Size(75, 23), Text = "Image..." };
+            faceTextToolTip.SetToolTip(button, "Insert an <img> tag at the cursor");
+            button.Click += delegate { InsertImageTag(target); };
+            return button;
+        }
+
+        private void InsertImageTag(TextBox target)
+        {
+            using (OpenFileDialog dialog = new OpenFileDialog())
+            {
+                dialog.Filter = "Images (*.png;*.jpg;*.jpeg;*.bmp;*.gif)|*.png;*.jpg;*.jpeg;*.bmp;*.gif|All files (*.*)|*.*";
+                if (dialog.ShowDialog(this) != DialogResult.OK)
+                {
+                    return;
+                }
+
+                string tag = "<img src=\"" + dialog.FileName + "\">";
+                int selectionStart = target.SelectionStart;
+                target.SelectedText = tag;
+                target.SelectionStart = selectionStart + tag.Length;
+                target.Focus();
+            }
+        }
+
         private void btnLineColor_Click(object sender, EventArgs e)
         {
             ShowColorPickerMenu((Control)sender, lineColor, delegate(Color selectedColor)
@@ -818,6 +1186,7 @@ namespace TeddyBench
 
         private void lineStyleChanged(object sender, EventArgs e)
         {
+            SaveActiveDesign();
             if (hasNet)
             {
                 preview.Invalidate();
@@ -1130,6 +1499,7 @@ namespace TeddyBench
                     {
                         serializer.WriteObject(stream, CreateLayoutFile());
                     }
+                    layoutDirectory = Path.GetDirectoryName(dialog.FileName);
                 }
                 catch (Exception exception)
                 {
@@ -1166,10 +1536,11 @@ namespace TeddyBench
                     string layoutDirectory = Path.GetDirectoryName(dialog.FileName);
                     foreach (NetDesignFile savedDesign in layout.Designs)
                     {
-                        loadedDesigns.Add(CreateDesignFromFile(savedDesign, layoutDirectory));
+                        loadedDesigns.Add(CreateDesignFromFile(savedDesign, layout, layoutDirectory));
                     }
                     ApplyLayoutFile(layout, loadedDesigns);
                     loadedDesigns = null;
+                    this.layoutDirectory = layoutDirectory;
                 }
                 catch (Exception exception)
                 {
@@ -1195,8 +1566,8 @@ namespace TeddyBench
                 FaceTolerance = txtFaceTolerance.Text,
                 ConnectFaces = chkConnectFaces.Checked,
                 StandsOnVertex = radStandsOnVertex.Checked,
-                LineColorArgb = lineColor.ToArgb(),
-                LineThickness = numLineThickness.Value,
+                LineColorArgb = designs[0].LineColor.ToArgb(),
+                LineThickness = designs[0].LineThickness,
                 HasNet = hasNet,
                 Designs = new List<NetDesignFile>()
             };
@@ -1211,6 +1582,9 @@ namespace TeddyBench
         {
             return new NetDesignFile
             {
+                Name = String.IsNullOrWhiteSpace(design.Name) ? null : design.Name,
+                LineColorArgb = design.LineColor.ToArgb(),
+                LineThickness = design.LineThickness,
                 HeaderText = design.HeaderText,
                 HeaderFontName = design.HeaderFontName,
                 HeaderFontSize = design.HeaderFontSize,
@@ -1256,9 +1630,6 @@ namespace TeddyBench
                 chkConnectFaces.Checked = layout.ConnectFaces;
                 radStandsOnVertex.Checked = layout.StandsOnVertex;
                 radStandsOnEdge.Checked = !layout.StandsOnVertex;
-                lineColor = Color.FromArgb(layout.LineColorArgb);
-                pnlLineColor.BackColor = lineColor;
-                numLineThickness.Value = Math.Max(numLineThickness.Minimum, Math.Min(numLineThickness.Maximum, layout.LineThickness));
                 UpdateFaceOptions();
                 UpdateMaximumNetCount();
 
@@ -1332,7 +1703,7 @@ namespace TeddyBench
             return String.IsNullOrEmpty(imagePath) ? "Image selected" : Path.GetFileName(imagePath);
         }
 
-        private static HexagonDesign CreateDesignFromFile(NetDesignFile savedDesign, string layoutDirectory)
+        private static HexagonDesign CreateDesignFromFile(NetDesignFile savedDesign, NetLayoutFile layout, string layoutDirectory)
         {
             if (savedDesign == null)
             {
@@ -1341,6 +1712,9 @@ namespace TeddyBench
 
             return new HexagonDesign
             {
+                Name = savedDesign.Name,
+                LineColor = Color.FromArgb(savedDesign.LineColorArgb ?? layout.LineColorArgb),
+                LineThickness = Math.Max(0m, Math.Min(10m, savedDesign.LineThickness ?? layout.LineThickness)),
                 HeaderText = savedDesign.HeaderText,
                 HeaderFontName = savedDesign.HeaderFontName,
                 HeaderFontSize = savedDesign.HeaderFontSize,
@@ -1530,12 +1904,17 @@ namespace TeddyBench
             PointF[] hexagon = GetHexagon(side, radStandsOnVertex.Checked);
             PointF[] screenHexagon = ScalePoints(hexagon, scale, origin);
 
-            using (Pen outline = new Pen(lineColor, Math.Max(minimumLineWidth, (float)numLineThickness.Value * scale)))
+            // A thickness of 0 draws no lines at all, not a hairline.
+            bool drawLines = design.LineThickness > 0;
+            using (Pen outline = new Pen(design.LineColor, Math.Max(minimumLineWidth, (float)design.LineThickness * scale)))
             using (Brush hexagonBrush = new SolidBrush(design.HexagonBackgroundColor))
             using (Brush faceBrush = new SolidBrush(design.FaceBackgroundColor))
             {
                 graphics.FillPolygon(hexagonBrush, screenHexagon);
-                graphics.DrawPolygon(outline, screenHexagon);
+                if (drawLines)
+                {
+                    graphics.DrawPolygon(outline, screenHexagon);
+                }
 
                 if (faceHeight > 0)
                 {
@@ -1569,7 +1948,10 @@ namespace TeddyBench
                     graphics.FillPolygon(faceBrush, screenFace);
                     DrawFaceImage(graphics, first, second, outward, side, faceHeight, scale, origin, design);
                     DrawFaceText(graphics, i, first, second, outward, side, faceHeight, scale, origin, isPhysicalOutput, design);
-                    graphics.DrawPolygon(outline, screenFace);
+                    if (drawLines)
+                    {
+                        graphics.DrawPolygon(outline, screenFace);
+                    }
 
                     if (tolerance > 0)
                     {
@@ -1584,11 +1966,14 @@ namespace TeddyBench
                         };
                         PointF[] screenToleranceFace = ScalePoints(toleranceFace, scale, origin);
                         graphics.FillPolygon(faceBrush, screenToleranceFace);
-                        graphics.DrawPolygon(outline, screenToleranceFace);
+                        if (drawLines)
+                        {
+                            graphics.DrawPolygon(outline, screenToleranceFace);
+                        }
                     }
                     }
 
-                    if (chkConnectFaces.Checked)
+                    if (chkConnectFaces.Checked && drawLines)
                     {
                         for (int i = 0; i < hexagon.Length; i++)
                         {
@@ -1723,36 +2108,144 @@ namespace TeddyBench
             if (!String.IsNullOrEmpty(textToDraw))
             {
                 RichTextStyle defaultStyle = new RichTextStyle(design.FaceTextFontName, design.FaceTextFontSize, design.FaceTextColor);
-                DrawStyledFaceText(graphics, textToDraw, defaultStyle, textArea, GetStringAlignment(design.FaceTextAlignment), scale, isPhysicalOutput);
+                DrawStyledText(graphics, textToDraw, defaultStyle, textArea, GetStringAlignment(design.FaceTextAlignment), scale, isPhysicalOutput, GetTextImage);
             }
             graphics.Restore(savedState);
         }
 
-        private static void DrawStyledFaceText(Graphics graphics, string text, RichTextStyle defaultStyle, RectangleF textArea, StringAlignment alignment, float scale, bool isPhysicalOutput)
+        private Image GetTextImage(string source)
         {
-            List<RichTextLine> lines = ParseStyledFaceText(text, defaultStyle);
-            if (lines.Count == 0)
+            if (String.IsNullOrWhiteSpace(source))
             {
-                return;
+                return null;
             }
 
-            List<MeasuredRichTextLine> measuredLines = new List<MeasuredRichTextLine>();
+            source = source.Trim();
+            Image image;
+            if (textImages.TryGetValue(source, out image))
+            {
+                return image;
+            }
+
             try
             {
-                float totalHeight = 0f;
-                foreach (RichTextLine line in lines)
+                if (source.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+                {
+                    int dataStart = source.IndexOf("base64,", StringComparison.OrdinalIgnoreCase);
+                    if (dataStart < 0)
+                    {
+                        return null;
+                    }
+                    using (MemoryStream stream = new MemoryStream(Convert.FromBase64String(source.Substring(dataStart + 7))))
+                    using (Image decoded = Image.FromStream(stream))
+                    {
+                        image = new Bitmap(decoded);
+                    }
+                }
+                else
+                {
+                    string path = source;
+                    Uri uri;
+                    if (source.StartsWith("file:", StringComparison.OrdinalIgnoreCase) && Uri.TryCreate(source, UriKind.Absolute, out uri))
+                    {
+                        path = uri.LocalPath;
+                    }
+                    if (!Path.IsPathRooted(path))
+                    {
+                        path = Path.Combine(layoutDirectory ?? Environment.CurrentDirectory, path);
+                    }
+                    // Missing files are not cached, so a path that is still
+                    // being typed shows up as soon as it is complete.
+                    if (!File.Exists(path))
+                    {
+                        return null;
+                    }
+                    using (Image loaded = Image.FromFile(path))
+                    {
+                        image = new Bitmap(loaded);
+                    }
+                }
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+
+            textImages[source] = image;
+            return image;
+        }
+
+        // Converts an <img> width/height (points, or millimetres with an
+        // "mm" suffix) into drawing units of the current output.
+        private static float GetImageLength(float points, float scale, bool isPhysicalOutput)
+        {
+            float millimetres = points * 25.4f / 72f;
+            return isPhysicalOutput ? millimetres : millimetres * scale;
+        }
+
+        // Draws styled text vertically centred in textArea.
+        private static void DrawStyledText(Graphics graphics, string text, RichTextStyle defaultStyle, RectangleF textArea, StringAlignment alignment, float scale, bool isPhysicalOutput, Func<string, Image> imageResolver)
+        {
+            using (MeasuredRichText measured = MeasureStyledText(graphics, text, defaultStyle, scale, isPhysicalOutput, imageResolver))
+            {
+                DrawMeasuredStyledText(graphics, measured, textArea.X, textArea.Width, textArea.Y + (textArea.Height - measured.Height) / 2f, alignment, isPhysicalOutput);
+            }
+        }
+
+        // Parses and measures styled text. The result owns its fonts and must be disposed.
+        private static MeasuredRichText MeasureStyledText(Graphics graphics, string text, RichTextStyle defaultStyle, float scale, bool isPhysicalOutput, Func<string, Image> imageResolver)
+        {
+            MeasuredRichText measured = new MeasuredRichText();
+            try
+            {
+                foreach (RichTextLine line in ParseStyledText(text, defaultStyle))
                 {
                     MeasuredRichTextLine measuredLine = new MeasuredRichTextLine();
                     foreach (RichTextRun run in line.Runs)
                     {
                         Font font = CreateTextFont(run.Style.FontName, run.Style.FontSize, scale, graphics, isPhysicalOutput, run.Style.FontStyle);
-                        using (StringFormat measureFormat = CreateStyledTextFormat())
+                        float fontHeight = font.GetHeight(graphics);
+                        float fontAscent = GetFontAscent(font, fontHeight);
+                        MeasuredRichTextRun measuredRun;
+                        if (run.IsImage)
                         {
-                            measuredLine.Runs.Add(new MeasuredRichTextRun(run, font, graphics.MeasureString(run.Text, font, PointF.Empty, measureFormat).Width));
+                            // By default an image fills the line box of the
+                            // surrounding text and keeps its aspect ratio.
+                            Image image = imageResolver == null ? null : imageResolver(run.ImageSource);
+                            float aspect = image != null && image.Width > 0 && image.Height > 0 ? (float)image.Width / image.Height : 1f;
+                            float height = run.ImageHeight > 0 ? GetImageLength(run.ImageHeight, scale, isPhysicalOutput) : 0f;
+                            float width = run.ImageWidth > 0 ? GetImageLength(run.ImageWidth, scale, isPhysicalOutput) : 0f;
+                            if (height <= 0 && width <= 0)
+                            {
+                                height = fontHeight;
+                            }
+                            if (height <= 0)
+                            {
+                                height = width / aspect;
+                            }
+                            if (width <= 0)
+                            {
+                                width = height * aspect;
+                            }
+                            // The image bottom sits on the text's descent line.
+                            float descent = fontHeight - fontAscent;
+                            measuredRun = new MeasuredRichTextRun(run, font, width) { Image = image, ImageHeight = height, Ascent = height - descent, Descent = descent };
                         }
-                        measuredLine.Width += measuredLine.Runs[measuredLine.Runs.Count - 1].Width;
-                        measuredLine.Height = Math.Max(measuredLine.Height, font.GetHeight(graphics));
+                        else
+                        {
+                            using (StringFormat measureFormat = CreateStyledTextFormat())
+                            {
+                                measuredRun = new MeasuredRichTextRun(run, font, graphics.MeasureString(run.Text, font, PointF.Empty, measureFormat).Width);
+                            }
+                            measuredRun.Ascent = fontAscent;
+                            measuredRun.Descent = fontHeight - fontAscent;
+                        }
+                        measuredLine.Runs.Add(measuredRun);
+                        measuredLine.Width += measuredRun.Width;
+                        measuredLine.Ascent = Math.Max(measuredLine.Ascent, measuredRun.Ascent);
+                        measuredLine.Descent = Math.Max(measuredLine.Descent, measuredRun.Descent);
                     }
+                    measuredLine.Height = measuredLine.Ascent + measuredLine.Descent;
 
                     if (measuredLine.Runs.Count == 0)
                     {
@@ -1762,45 +2255,76 @@ namespace TeddyBench
                         }
                     }
 
-                    totalHeight += measuredLine.Height;
-                    measuredLines.Add(measuredLine);
+                    measured.Height += measuredLine.Height;
+                    measured.Lines.Add(measuredLine);
+                }
+                return measured;
+            }
+            catch
+            {
+                measured.Dispose();
+                throw;
+            }
+        }
+
+        // Draws measured text from top; each line is aligned within [left, left + width].
+        private static void DrawMeasuredStyledText(Graphics graphics, MeasuredRichText measured, float left, float width, float top, StringAlignment alignment, bool isPhysicalOutput)
+        {
+            float y = top;
+            foreach (MeasuredRichTextLine line in measured.Lines)
+            {
+                float x = left;
+                if (alignment == StringAlignment.Center)
+                {
+                    x += (width - line.Width) / 2f;
+                }
+                else if (alignment == StringAlignment.Far)
+                {
+                    x += width - line.Width;
                 }
 
-                float y = textArea.Y + (textArea.Height - totalHeight) / 2f;
-                foreach (MeasuredRichTextLine line in measuredLines)
+                // Runs share a baseline, so mixed sizes and images line up.
+                float baseline = y + line.Ascent;
+                foreach (MeasuredRichTextRun run in line.Runs)
                 {
-                    float x = textArea.X;
-                    if (alignment == StringAlignment.Center)
+                    if (run.Run.IsImage)
                     {
-                        x += (textArea.Width - line.Width) / 2f;
+                        RectangleF imageBounds = new RectangleF(x, baseline - run.Ascent, run.Width, run.ImageHeight);
+                        if (run.Image != null)
+                        {
+                            InterpolationMode previousMode = graphics.InterpolationMode;
+                            graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                            graphics.DrawImage(run.Image, imageBounds);
+                            graphics.InterpolationMode = previousMode;
+                        }
+                        else if (!isPhysicalOutput)
+                        {
+                            // Missing images show a placeholder in the preview only.
+                            using (Pen placeholder = new Pen(Color.Firebrick, 1f) { DashStyle = DashStyle.Dash })
+                            {
+                                graphics.DrawRectangle(placeholder, imageBounds.X, imageBounds.Y, imageBounds.Width, imageBounds.Height);
+                            }
+                        }
                     }
-                    else if (alignment == StringAlignment.Far)
-                    {
-                        x += textArea.Width - line.Width;
-                    }
-
-                    foreach (MeasuredRichTextRun run in line.Runs)
+                    else
                     {
                         using (Brush brush = new SolidBrush(run.Run.Style.Color))
                         using (StringFormat drawFormat = CreateStyledTextFormat())
                         {
-                            graphics.DrawString(run.Run.Text, run.Font, brush, new PointF(x, y), drawFormat);
+                            graphics.DrawString(run.Run.Text, run.Font, brush, new PointF(x, baseline - run.Ascent), drawFormat);
                         }
-                        x += run.Width;
                     }
-                    y += line.Height;
+                    x += run.Width;
                 }
+                y += line.Height;
             }
-            finally
-            {
-                foreach (MeasuredRichTextLine line in measuredLines)
-                {
-                    foreach (MeasuredRichTextRun run in line.Runs)
-                    {
-                        run.Font.Dispose();
-                    }
-                }
-            }
+        }
+
+        private static float GetFontAscent(Font font, float fontHeight)
+        {
+            FontFamily family = font.FontFamily;
+            int lineSpacing = family.GetLineSpacing(font.Style);
+            return lineSpacing > 0 ? fontHeight * family.GetCellAscent(font.Style) / lineSpacing : fontHeight;
         }
 
         private static StringFormat CreateStyledTextFormat()
@@ -1810,14 +2334,14 @@ namespace TeddyBench
             return format;
         }
 
-        private static List<RichTextLine> ParseStyledFaceText(string text, RichTextStyle defaultStyle)
+        private static List<RichTextLine> ParseStyledText(string text, RichTextStyle defaultStyle)
         {
             List<RichTextRun> runs = new List<RichTextRun>();
             List<RichTextTag> activeTags = new List<RichTextTag>();
             int position = 0;
             while (position < text.Length)
             {
-                int tagStart = text.IndexOf('[', position);
+                int tagStart = text.IndexOfAny(new[] { '[', '<' }, position);
                 if (tagStart < 0)
                 {
                     AddRichTextRun(runs, text.Substring(position), GetRichTextStyle(defaultStyle, activeTags));
@@ -1827,6 +2351,29 @@ namespace TeddyBench
                 if (tagStart > position)
                 {
                     AddRichTextRun(runs, text.Substring(position, tagStart - position), GetRichTextStyle(defaultStyle, activeTags));
+                }
+
+                if (text[tagStart] == '<')
+                {
+                    int htmlTagEnd = text.IndexOf('>', tagStart + 1);
+                    string htmlTag = htmlTagEnd < 0 ? null : text.Substring(tagStart + 1, htmlTagEnd - tagStart - 1);
+                    RichTextRun imageRun;
+                    if (htmlTag != null && TryParseImageTag(htmlTag, GetRichTextStyle(defaultStyle, activeTags), out imageRun))
+                    {
+                        runs.Add(imageRun);
+                        position = htmlTagEnd + 1;
+                    }
+                    else if (htmlTag != null && Regex.IsMatch(htmlTag, @"^\s*/\s*img\s*$", RegexOptions.IgnoreCase))
+                    {
+                        position = htmlTagEnd + 1;
+                    }
+                    else
+                    {
+                        // Not an image tag: keep the '<' as text.
+                        AddRichTextRun(runs, "<", GetRichTextStyle(defaultStyle, activeTags));
+                        position = tagStart + 1;
+                    }
+                    continue;
                 }
 
                 int tagEnd = text.IndexOf(']', tagStart + 1);
@@ -1852,6 +2399,12 @@ namespace TeddyBench
             List<RichTextLine> lines = new List<RichTextLine> { new RichTextLine() };
             foreach (RichTextRun run in runs)
             {
+                if (run.IsImage)
+                {
+                    lines[lines.Count - 1].Runs.Add(run);
+                    continue;
+                }
+
                 string normalizedText = run.Text.Replace("\r\n", "\n").Replace('\r', '\n');
                 string[] parts = normalizedText.Split(new[] { '\n' });
                 for (int i = 0; i < parts.Length; i++)
@@ -1864,6 +2417,71 @@ namespace TeddyBench
                 }
             }
             return lines;
+        }
+
+        private static readonly Regex ImageTagPattern = new Regex(@"^\s*img(?:\s+(?<attributes>.*?))?\s*/?\s*$", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+        private static readonly Regex HtmlAttributePattern = new Regex(@"(?<name>[\w-]+)\s*=\s*(?:""(?<value>[^""]*)""|'(?<value>[^']*)'|(?<value>[^\s""'>]+))", RegexOptions.Singleline);
+
+        // Parses <img src="..." width="..." height="...">. Sizes are points,
+        // or millimetres with an "mm" suffix.
+        private static bool TryParseImageTag(string tagText, RichTextStyle style, out RichTextRun run)
+        {
+            run = null;
+            Match match = ImageTagPattern.Match(tagText);
+            if (!match.Success)
+            {
+                return false;
+            }
+
+            string source = null;
+            float width = 0f;
+            float height = 0f;
+            foreach (Match attribute in HtmlAttributePattern.Matches(match.Groups["attributes"].Value))
+            {
+                string name = attribute.Groups["name"].Value.ToLowerInvariant();
+                string value = attribute.Groups["value"].Value;
+                if (name == "src")
+                {
+                    source = value;
+                }
+                else if (name == "width")
+                {
+                    width = ParseImageLength(value);
+                }
+                else if (name == "height")
+                {
+                    height = ParseImageLength(value);
+                }
+            }
+            if (String.IsNullOrWhiteSpace(source))
+            {
+                return false;
+            }
+
+            run = new RichTextRun(String.Empty, style) { IsImage = true, ImageSource = source, ImageWidth = width, ImageHeight = height };
+            return true;
+        }
+
+        private static float ParseImageLength(string value)
+        {
+            string text = (value ?? String.Empty).Trim().ToLowerInvariant();
+            float factor = 1f;
+            if (text.EndsWith("mm"))
+            {
+                factor = 72f / 25.4f;
+                text = text.Substring(0, text.Length - 2);
+            }
+            else if (text.EndsWith("pt") || text.EndsWith("px"))
+            {
+                text = text.Substring(0, text.Length - 2);
+            }
+
+            float length;
+            if (!float.TryParse(text.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out length) || length <= 0)
+            {
+                return 0f;
+            }
+            return Math.Min(1000f, length * factor);
         }
 
         private static void AddRichTextRun(List<RichTextRun> runs, string text, RichTextStyle style)
@@ -2045,89 +2663,51 @@ namespace TeddyBench
             fontSizeBox = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Location = new Point(202, 48 + verticalOffset), Size = new Size(43, 21) };
             textColorButton = new Button { Location = new Point(12, 77 + verticalOffset), Size = new Size(100, 23), Text = "Text color..." };
             textColorPreview = new Panel { Location = new Point(119, 78 + verticalOffset), Size = new Size(28, 21), BackColor = Color.Black, BorderStyle = BorderStyle.FixedSingle };
+            PopulateFontOptions(fontBox, fontSizeBox, defaultFontSize);
 
-            foreach (FontFamily family in FontFamily.Families)
+            group.Controls.AddRange(new Control[]
             {
-                fontBox.Items.Add(family.Name);
-            }
-            fontBox.Sorted = true;
-            fontBox.SelectedItem = SystemFonts.DefaultFont.FontFamily.Name;
-            if (fontBox.SelectedIndex < 0 && fontBox.Items.Count > 0)
-            {
-                fontBox.SelectedIndex = 0;
-            }
-
-            int[] sizes = new int[] { 8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48 };
-            foreach (int size in sizes)
-            {
-                fontSizeBox.Items.Add(size.ToString(CultureInfo.InvariantCulture));
-            }
-            fontSizeBox.SelectedItem = defaultFontSize.ToString(CultureInfo.InvariantCulture);
-
-            group.Controls.AddRange(new Control[] { textBox, fontLabel, fontBox, sizeLabel, fontSizeBox, textColorButton, textColorPreview });
+                CreateHelpIcon(StyledTextHelp), textBox, fontLabel, fontBox, sizeLabel, fontSizeBox, textColorButton, textColorPreview,
+                CreateInsertImageButton(new Point(170, 77 + verticalOffset), textBox)
+            });
             return group;
         }
 
         private void DrawHexagonText(Graphics graphics, float scale, PointF origin, bool isPhysicalOutput, HexagonDesign design)
         {
-            List<TextLine> lines = new List<TextLine>();
-            if (!String.IsNullOrWhiteSpace(design.HeaderText))
-            {
-                lines.Add(new TextLine(design.HeaderText, design.HeaderFontName, design.HeaderFontSize, design.HeaderTextColor));
-            }
-            if (!String.IsNullOrWhiteSpace(design.Subtext))
-            {
-                lines.Add(new TextLine(design.Subtext, design.SubtextFontName, design.SubtextFontSize, design.SubtextColor));
-            }
-            if (lines.Count == 0)
-            {
-                return;
-            }
-
-            float totalHeight = 0;
-            List<Font> fonts = new List<Font>();
-            List<SizeF> sizes = new List<SizeF>();
+            // Header and text are stacked and centred together on the hexagon.
+            List<MeasuredRichText> blocks = new List<MeasuredRichText>();
             try
             {
-                foreach (TextLine line in lines)
+                if (!String.IsNullOrWhiteSpace(design.HeaderText))
                 {
-                    Font font = CreateTextFont(line.FontName, line.FontSize, scale, graphics, isPhysicalOutput);
-                    fonts.Add(font);
-                    using (StringFormat measureFormat = new StringFormat(StringFormatFlags.NoWrap))
-                    {
-                        SizeF textSize = graphics.MeasureString(line.Text, font, new SizeF(1000000, 1000000), measureFormat);
-                        sizes.Add(textSize);
-                        totalHeight += textSize.Height;
-                    }
+                    blocks.Add(MeasureStyledText(graphics, design.HeaderText, new RichTextStyle(design.HeaderFontName, design.HeaderFontSize, design.HeaderTextColor), scale, isPhysicalOutput, GetTextImage));
+                }
+                if (!String.IsNullOrWhiteSpace(design.Subtext))
+                {
+                    blocks.Add(MeasureStyledText(graphics, design.Subtext, new RichTextStyle(design.SubtextFontName, design.SubtextFontSize, design.SubtextColor), scale, isPhysicalOutput, GetTextImage));
                 }
 
-                float currentY = origin.Y - totalHeight / 2f;
-                for (int i = 0; i < lines.Count; i++)
+                float totalHeight = 0f;
+                foreach (MeasuredRichText block in blocks)
                 {
-                    float unboundedTextWidth = Math.Max(10000f, sizes[i].Width * 2f);
-                    RectangleF textArea = new RectangleF(origin.X - unboundedTextWidth / 2f, currentY, unboundedTextWidth, sizes[i].Height);
-                    using (StringFormat format = new StringFormat(StringFormatFlags.NoWrap))
-                    using (Brush textBrush = new SolidBrush(lines[i].Color))
-                    {
-                        format.Alignment = StringAlignment.Center;
-                        format.LineAlignment = StringAlignment.Near;
-                        graphics.DrawString(lines[i].Text, fonts[i], textBrush, textArea, format);
-                    }
-                    currentY += sizes[i].Height;
+                    totalHeight += block.Height;
+                }
+
+                float top = origin.Y - totalHeight / 2f;
+                foreach (MeasuredRichText block in blocks)
+                {
+                    DrawMeasuredStyledText(graphics, block, origin.X, 0f, top, StringAlignment.Center, isPhysicalOutput);
+                    top += block.Height;
                 }
             }
             finally
             {
-                foreach (Font font in fonts)
+                foreach (MeasuredRichText block in blocks)
                 {
-                    font.Dispose();
+                    block.Dispose();
                 }
             }
-        }
-
-        private static Font CreateTextFont(string fontName, int fontSize, float scale, Graphics graphics, bool isPhysicalOutput)
-        {
-            return CreateTextFont(fontName, (float)fontSize, scale, graphics, isPhysicalOutput, FontStyle.Regular);
         }
 
         private static Font CreateTextFont(string fontName, float fontSize, float scale, Graphics graphics, bool isPhysicalOutput, FontStyle fontStyle)
@@ -2210,6 +2790,11 @@ namespace TeddyBench
         {
             public string Text;
             public RichTextStyle Style;
+            public bool IsImage;
+            public string ImageSource;
+            // Requested image size in points; 0 means automatic.
+            public float ImageWidth;
+            public float ImageHeight;
 
             public RichTextRun(string text, RichTextStyle style)
             {
@@ -2228,6 +2813,10 @@ namespace TeddyBench
             public RichTextRun Run;
             public Font Font;
             public float Width;
+            public float Ascent;
+            public float Descent;
+            public Image Image;
+            public float ImageHeight;
 
             public MeasuredRichTextRun(RichTextRun run, Font font, float width)
             {
@@ -2237,27 +2826,31 @@ namespace TeddyBench
             }
         }
 
+        private sealed class MeasuredRichText : IDisposable
+        {
+            public readonly List<MeasuredRichTextLine> Lines = new List<MeasuredRichTextLine>();
+            public float Height;
+
+            public void Dispose()
+            {
+                foreach (MeasuredRichTextLine line in Lines)
+                {
+                    foreach (MeasuredRichTextRun run in line.Runs)
+                    {
+                        run.Font.Dispose();
+                    }
+                }
+                Lines.Clear();
+            }
+        }
+
         private sealed class MeasuredRichTextLine
         {
             public readonly List<MeasuredRichTextRun> Runs = new List<MeasuredRichTextRun>();
             public float Width;
             public float Height;
-        }
-
-        private sealed class TextLine
-        {
-            public string Text { get; private set; }
-            public string FontName { get; private set; }
-            public int FontSize { get; private set; }
-            public Color Color { get; private set; }
-
-            public TextLine(string text, string fontName, int fontSize, Color color)
-            {
-                Text = text;
-                FontName = fontName;
-                FontSize = fontSize;
-                Color = color;
-            }
+            public float Ascent;
+            public float Descent;
         }
 
         [DataContract]
@@ -2278,6 +2871,10 @@ namespace TeddyBench
         [DataContract]
         private sealed class NetDesignFile
         {
+            // Older layouts store the line style once in NetLayoutFile.
+            [DataMember(EmitDefaultValue = false)] public string Name { get; set; }
+            [DataMember(EmitDefaultValue = false)] public int? LineColorArgb { get; set; }
+            [DataMember(EmitDefaultValue = false)] public decimal? LineThickness { get; set; }
             [DataMember] public string HeaderText { get; set; }
             [DataMember] public string HeaderFontName { get; set; }
             [DataMember] public int HeaderFontSize { get; set; }
@@ -2310,6 +2907,10 @@ namespace TeddyBench
 
         private sealed class HexagonDesign : IDisposable
         {
+            // Empty means the tab shows its numbered default name.
+            public string Name;
+            public Color LineColor = Color.Gray;
+            public decimal LineThickness = 0.35m;
             public string HeaderText;
             public string HeaderFontName;
             public int HeaderFontSize;
@@ -2345,6 +2946,9 @@ namespace TeddyBench
             {
                 return new HexagonDesign
                 {
+                    Name = Name,
+                    LineColor = LineColor,
+                    LineThickness = LineThickness,
                     HeaderText = HeaderText,
                     HeaderFontName = HeaderFontName,
                     HeaderFontSize = HeaderFontSize,
@@ -2516,6 +3120,7 @@ namespace TeddyBench
 
             int maximumNets = Math.Max(1, GetMaximumNetsOnA4(GetNetBounds(side, faceHeight, tolerance, radStandsOnVertex.Checked)));
             numHexagonCount.Maximum = maximumNets;
+            UpdateDesignButtons();
         }
 
         private static int GetMaximumNetsOnA4(RectangleF bounds)
