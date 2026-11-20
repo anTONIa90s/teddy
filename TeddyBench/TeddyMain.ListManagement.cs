@@ -47,7 +47,7 @@ private void aboutToolStripMenuItem_Click(object sender, EventArgs e)
 
         private void renameToolStripMenuItem_Click(object sender, EventArgs e)
         {
-            if (LastSelectediItem != null/* && LastSelectediItem.ImageKey == "custom"*/)
+            if (LastSelectediItem != null/* && LastSelectediItem.ImageKey == "custom"*/ && !IsBackupOnlyItem(LastSelectediItem))
             {
                 LastSelectediItem.BeginEdit();
             }
@@ -210,7 +210,24 @@ private void aboutToolStripMenuItem_Click(object sender, EventArgs e)
 
         private void UpdateTonieContextMenu()
         {
-            bool isCustom = IsCustomTonieItem(LastSelectediItem);
+            /* items only in the backup directory are not on the card: offer no card operations for them */
+            List<ListViewTag> selectedTags = lstTonies.SelectedItems.Cast<ListViewItem>().Select(i => i.Tag as ListViewTag).Where(t => t != null).ToList();
+            bool cardActions = !selectedTags.Any(t => t.Location == eLocation.BackupOnly);
+            bool allCardOnly = selectedTags.Count > 0 && selectedTags.All(t => t.Location == eLocation.CardOnly);
+            bool allBackupOnly = selectedTags.Count > 0 && selectedTags.All(t => t.Location == eLocation.BackupOnly && !IsFlatRootFile(t));
+
+            toggleLiveFlagToolStripMenuItem.Visible = cardActions;
+            renameToolStripMenuItem.Visible = cardActions;
+            deleteToolStripMenuItem.Visible = cardActions;
+            assignNewUIDToolStripMenuItem.Visible = cardActions;
+            addExplorerTitleToolStripMenuItem.Visible = cardActions;
+            removeExplorerTitleToolStripMenuItem.Visible = cardActions;
+            copyToBackupToolStripMenuItem.Visible = allCardOnly;
+            copyToBackupToolStripMenuItem.Enabled = allCardOnly && !SyncCopyRunning;
+            copyToCardToolStripMenuItem.Visible = allBackupOnly;
+            copyToCardToolStripMenuItem.Enabled = allBackupOnly && !SyncCopyRunning;
+
+            bool isCustom = cardActions && IsCustomTonieItem(LastSelectediItem);
             setCustomImageToolStripMenuItem.Visible = isCustom;
             setCustomImageToolStripMenuItem.Enabled = isCustom;
             resetCustomImageToolStripMenuItem.Visible = isCustom;
@@ -249,7 +266,7 @@ private void aboutToolStripMenuItem_Click(object sender, EventArgs e)
                 {
                     if (lstTonies.SelectedItems[0] == LastSelectediItem)
                     {
-                        if (lstTonies.SelectedItems[0].ImageKey == "custom")
+                        if (lstTonies.SelectedItems[0].ImageKey == "custom" && !IsBackupOnlyItem(LastSelectediItem))
                         {
                             LastSelectediItem.BeginEdit();
                         }
@@ -268,7 +285,7 @@ private void aboutToolStripMenuItem_Click(object sender, EventArgs e)
         {
             if (e.KeyData == Keys.F2 && lstTonies.SelectedItems.Count > 0)
             {
-                if (lstTonies.SelectedItems[0].ImageKey == "custom")
+                if (lstTonies.SelectedItems[0].ImageKey == "custom" && !IsBackupOnlyItem(lstTonies.SelectedItems[0]))
                 {
                     lstTonies.SelectedItems[0].BeginEdit();
                 }
@@ -298,6 +315,12 @@ private void aboutToolStripMenuItem_Click(object sender, EventArgs e)
 
             if (e.Label == null)
             {
+                return;
+            }
+
+            if (tag.Location == eLocation.BackupOnly)
+            {
+                e.CancelEdit = true;
                 return;
             }
 
@@ -336,6 +359,11 @@ private void aboutToolStripMenuItem_Click(object sender, EventArgs e)
                 ListViewItem item = lstTonies.SelectedItems[0];
 
                 ListViewTag tag = item.Tag as ListViewTag;
+                if (tag.Location == eLocation.BackupOnly)
+                {
+                    /* not on the card, a new UID would move the backup file onto the card */
+                    return;
+                }
                 var fi = new FileInfo(tag.FileName);
                 string oldUid = ReverseUid(fi.Directory.Name + fi.Name);
 
@@ -397,6 +425,12 @@ private void aboutToolStripMenuItem_Click(object sender, EventArgs e)
         {
             bool deleteAll = false;
 
+            if (lstTonies.SelectedItems.Cast<ListViewItem>().All(IsBackupOnlyItem))
+            {
+                /* nothing on the card selected */
+                return;
+            }
+
             StopAnalyzeThread();
 
             if (lstTonies.SelectedItems.Count > 1)
@@ -417,6 +451,12 @@ private void aboutToolStripMenuItem_Click(object sender, EventArgs e)
             {
                 ListViewTag tag = item.Tag as ListViewTag;
                 string current = item.Text;
+
+                if (tag.Location == eLocation.BackupOnly)
+                {
+                    /* only delete from the card, never from the backup directory */
+                    continue;
+                }
 
                 if (!deleteAll)
                 {
@@ -599,28 +639,38 @@ private void aboutToolStripMenuItem_Click(object sender, EventArgs e)
         {
             foreach (ListViewItem item in lstTonies.Items)
             {
-                if (cmbSorting.SelectedIndex == 3)
-                {
-                    if (item.ImageKey == "unknown")
-                    {
-                        item.Group = lstTonies.Groups[0];
-                    }
-                    else if (item.ImageKey == "custom" || item.ImageKey.StartsWith(CustomImageKeyPrefix))
-                    {
-                        item.Group = lstTonies.Groups[1];
-                    }
-                    else
-                    {
-                        item.Group = lstTonies.Groups[2];
-                    }
-                }
-                else
-                {
-                    item.Group = lstTonies.Groups[3];
-                }
+                item.Group = GetItemGroup(item);
             }
             (lstTonies.ListViewItemSorter as ListViewItemComparer).Characteristic = cmbSorting.SelectedIndex;
             lstTonies.Sort();
+        }
+
+        private ListViewGroup GetItemGroup(ListViewItem item)
+        {
+            /* while comparing SD card and backup, the location groups take precedence */
+            ListViewGroup locationGroup = GetLocationGroup((item.Tag as ListViewTag)?.Location ?? eLocation.None);
+            if (locationGroup != null)
+            {
+                return locationGroup;
+            }
+
+            if (cmbSorting.SelectedIndex == 3)
+            {
+                if (item.ImageKey == "unknown")
+                {
+                    return lstTonies.Groups[0];
+                }
+                else if (item.ImageKey == "custom" || item.ImageKey.StartsWith(CustomImageKeyPrefix))
+                {
+                    return lstTonies.Groups[1];
+                }
+                else
+                {
+                    return lstTonies.Groups[2];
+                }
+            }
+
+            return lstTonies.Groups[3];
         }
 
         private void exitToolStripMenuItem_Click(object sender, EventArgs e)
@@ -657,6 +707,11 @@ private void aboutToolStripMenuItem_Click(object sender, EventArgs e)
             {
                 ListViewTag tag = t.Tag as ListViewTag;
 
+                if (tag.Location == eLocation.BackupOnly)
+                {
+                    continue;
+                }
+
                 if(bUnhideAll || tag.FileInfo.Attributes.HasFlag(FileAttributes.Hidden))
                 {
                     tag.FileInfo.Attributes &= ~FileAttributes.Hidden;
@@ -673,7 +728,7 @@ private void aboutToolStripMenuItem_Click(object sender, EventArgs e)
         private void addExplorerTitleToolStripMenuItem_Click(object sender, EventArgs e)
         {
             ListViewTag tag = LastSelectediItem?.Tag as ListViewTag;
-            if (tag == null)
+            if (tag == null || tag.Location == eLocation.BackupOnly)
             {
                 return;
             }
@@ -695,7 +750,7 @@ private void aboutToolStripMenuItem_Click(object sender, EventArgs e)
         private void removeExplorerTitleToolStripMenuItem_Click(object sender, EventArgs e)
         {
             ListViewTag tag = LastSelectediItem?.Tag as ListViewTag;
-            if (tag == null)
+            if (tag == null || tag.Location == eLocation.BackupOnly)
             {
                 return;
             }
@@ -738,7 +793,7 @@ private void aboutToolStripMenuItem_Click(object sender, EventArgs e)
             {
                 ListViewTag tag = item.Tag as ListViewTag;
                 string directoryPath = tag?.FileInfo?.DirectoryName;
-                if (tag == null || string.IsNullOrWhiteSpace(directoryPath) || !processedDirectories.Add(directoryPath))
+                if (tag == null || tag.Location == eLocation.BackupOnly || string.IsNullOrWhiteSpace(directoryPath) || !processedDirectories.Add(directoryPath))
                 {
                     continue;
                 }
@@ -791,7 +846,7 @@ private void aboutToolStripMenuItem_Click(object sender, EventArgs e)
             foreach (ListViewItem item in lstTonies.Items)
             {
                 ListViewTag tag = item.Tag as ListViewTag;
-                if (tag == null)
+                if (tag == null || tag.Location == eLocation.BackupOnly)
                 {
                     continue;
                 }

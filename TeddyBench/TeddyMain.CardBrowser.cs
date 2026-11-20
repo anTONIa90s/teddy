@@ -114,6 +114,8 @@ private void StartThreads()
             grpCardContent.Visible = false;
             lblMessage.Visible = true;
             CurrentDirectory = null;
+            CurrentDirectoryIsCard = false;
+            UpdateCompareWatcher(null);
             AutoOpenDrive = true;
             Text = TitleString;
             StopAnalyzeThread();
@@ -186,6 +188,11 @@ private void StartThreads()
                 {
                     OpenPath(Settings.BackupDirectory);
                 }
+                else
+                {
+                    /* the comparison with the backup directory may have changed */
+                    RefreshCardContent();
+                }
             }
         }
 
@@ -198,6 +205,14 @@ private void StartThreads()
             }
 
             CurrentDirectory = rootDirectory;
+            CurrentDirectoryIsCard = IsCardContentDirectory(rootDirectory);
+
+            if (CardWatcher != null)
+            {
+                CardWatcher.EnableRaisingEvents = false;
+                CardWatcher.Dispose();
+                CardWatcher = null;
+            }
 
             FileSystemWatcher watcher = new FileSystemWatcher(CurrentDirectory);
 
@@ -207,11 +222,18 @@ private void StartThreads()
             watcher.Renamed += OnDirectoryChanged;
 
             watcher.EnableRaisingEvents = true;
+            CardWatcher = watcher;
             RefreshCardContent();
         }
 
         private void OnDirectoryChanged(object sender, FileSystemEventArgs e)
         {
+            if (SyncCopyRunning)
+            {
+                /* the copy refreshes once when it is done */
+                return;
+            }
+
             RefreshCardContent();
         }
 
@@ -223,15 +245,24 @@ private void StartThreads()
                 return;
             }
 
+            if (CurrentDirectory == null)
+            {
+                return;
+            }
+
             StopAnalyzeThread();
 
             Text = TitleString + " - " + CurrentDirectory;
 
+            /* compare with the backup directory only while a card's CONTENT folder is open */
+            string compareDirectory = GetCompareDirectory();
+            UpdateCompareWatcher(compareDirectory);
+
             lock (RegisteredItems)
             {
-                btnAdd.Enabled = true;
-                btnDelete.Enabled = true;
-                btnSave.Enabled = true;
+                btnAdd.Enabled = !SyncCopyRunning;
+                btnDelete.Enabled = !SyncCopyRunning;
+                btnSave.Enabled = !SyncCopyRunning;
 
                 txtLog.Visible = false;
                 grpCardContent.Visible = true;
@@ -239,59 +270,386 @@ private void StartThreads()
                 lstTonies.Items.Clear();
                 RegisteredItems.Clear();
 
-                try
+                List<ListViewTag> cardTags = ScanTonieDirectory(CurrentDirectory) ?? new List<ListViewTag>();
+                List<ListViewTag> backupTags = null;
+
+                if (compareDirectory != null)
                 {
-                    /* scan card content */
-                    foreach (var dir in new DirectoryInfo(CurrentDirectory).GetDirectories())
+                    backupTags = ScanTonieDirectory(compareDirectory);
+                    if (backupTags == null)
                     {
-                        var file = dir.GetFiles("*0304E0").FirstOrDefault();
-
-                        if (file != null)
-                        {
-                            ListViewItem item = new ListViewItem();
-                            ListViewTag tag = new ListViewTag(file.FullName);
-
-                            item.Tag = tag;
-                            item.Text = tag.Uid;
-                            item.ImageKey = "unknown";
-                            item.Group = lstTonies.Groups[3];
-
-                            lstTonies.Items.Add(item);
-
-                            RegisteredItems.Add(item.Tag as ListViewTag, item);
-                        }
-                    }
-
-                    /* scan local directory */
-                    foreach(var file in new DirectoryInfo(CurrentDirectory).GetFiles())
-                    {
-                        Regex reg = new Regex("(?<prod>[0-9]{8}|[0-9]{2}-[0-9]{4}) - [0-9A-F]{8} - (?<name>.*)");
-                        var match = reg.Match(file.Name);
-                        if (match.Success)
-                        {
-                            ListViewItem item = new ListViewItem();
-                            ListViewTag tag = new ListViewTag(file.FullName);
-
-                            item.Tag = tag;
-                            item.Text = match.Groups["prod"].Value + " - " + match.Groups["name"].Value;
-                            item.ImageKey = "unknown";
-                            item.Group = lstTonies.Groups[3];
-
-                            lstTonies.Items.Add(item);
-
-                            RegisteredItems.Add(item.Tag as ListViewTag, item);
-                        }
+                        /* no partial comparison: show the card alone */
+                        LogWindow.Log(LogWindow.eLogLevel.Error, "Comparison with backup directory '" + compareDirectory + "' disabled, it could not be scanned.");
+                        UpdateCompareWatcher(null);
                     }
                 }
-                catch (Exception ex)
+
+                if (backupTags == null)
                 {
-                    LogWindow.Log(LogWindow.eLogLevel.Error, "Exception while scanning directory '" + CurrentDirectory + "':" + ex.Message);
+                    foreach (ListViewTag tag in cardTags)
+                    {
+                        AddTonieItem(tag);
+                    }
+                }
+                else
+                {
+                    var cardPaths = new HashSet<string>(cardTags.Select(t => t.RelativePath), StringComparer.OrdinalIgnoreCase);
+                    var backupPaths = new HashSet<string>(backupTags.Select(t => t.RelativePath), StringComparer.OrdinalIgnoreCase);
+
+                    foreach (ListViewTag tag in cardTags)
+                    {
+                        tag.Location = backupPaths.Contains(tag.RelativePath) ? eLocation.Both : eLocation.CardOnly;
+                        AddTonieItem(tag);
+                    }
+                    foreach (ListViewTag tag in backupTags)
+                    {
+                        if (!cardPaths.Contains(tag.RelativePath))
+                        {
+                            tag.Location = eLocation.BackupOnly;
+                            AddTonieItem(tag);
+                        }
+                    }
                 }
                 lstTonies.Sort();
             }
 
+            UpdateCompareControls();
             StartAnalyzeThread();
         }
+
+        /// <summary>
+        /// Scans a CONTENT-like directory: "XXXXXXXX\YYYYYYYY" tonie files in subdirectories plus
+        /// flat files named "&lt;prod&gt; - &lt;audio id&gt; - &lt;name&gt;" in the root.
+        /// </summary>
+        private List<ListViewTag> ScanTonieDirectory(string rootDirectory)
+        {
+            List<ListViewTag> tags = new List<ListViewTag>();
+
+            try
+            {
+                /* scan card content */
+                foreach (var dir in new DirectoryInfo(rootDirectory).GetDirectories())
+                {
+                    var file = dir.GetFiles("*0304E0").FirstOrDefault();
+
+                    if (file != null)
+                    {
+                        ListViewTag tag = new ListViewTag(file.FullName);
+                        tag.RelativePath = Path.Combine(dir.Name, file.Name);
+                        tags.Add(tag);
+                    }
+                }
+
+                /* scan local directory */
+                foreach (var file in new DirectoryInfo(rootDirectory).GetFiles())
+                {
+                    if (FlatTonieFileRegex.Match(file.Name).Success)
+                    {
+                        ListViewTag tag = new ListViewTag(file.FullName);
+                        tag.RelativePath = file.Name;
+                        tags.Add(tag);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogWindow.Log(LogWindow.eLogLevel.Error, "Exception while scanning directory '" + rootDirectory + "':" + ex.Message);
+                return null;
+            }
+
+            return tags;
+        }
+
+        private static readonly Regex FlatTonieFileRegex = new Regex("(?<prod>[0-9]{8}|[0-9]{2}-[0-9]{4}) - [0-9A-F]{8} - (?<name>.*)");
+
+        /* caller holds the RegisteredItems lock */
+        private void AddTonieItem(ListViewTag tag)
+        {
+            ListViewItem item = new ListViewItem();
+            var match = FlatTonieFileRegex.Match(tag.FileInfo.Name);
+
+            item.Tag = tag;
+            item.Text = (tag.RelativePath == tag.FileInfo.Name && match.Success)
+                ? match.Groups["prod"].Value + " - " + match.Groups["name"].Value
+                : tag.Uid;
+            item.ImageKey = "unknown";
+            item.Group = GetLocationGroup(tag.Location) ?? lstTonies.Groups[3];
+
+            lstTonies.Items.Add(item);
+
+            RegisteredItems.Add(tag, item);
+        }
+
+        #region SD card / backup comparison
+
+        /// <summary>
+        /// The backup directory to compare the open directory with, or null when comparison is off.
+        /// Comparison is on when the open directory is the CONTENT folder in the root of a removable
+        /// drive (detected card or the same folder opened manually) and a backup directory is set,
+        /// exists and is not the open directory itself (e.g. the no-card fallback).
+        /// </summary>
+        private string GetCompareDirectory()
+        {
+            if (!CurrentDirectoryIsCard || string.IsNullOrEmpty(Settings.BackupDirectory))
+            {
+                return null;
+            }
+
+            try
+            {
+                if (!Directory.Exists(Settings.BackupDirectory) || IsSamePath(Settings.BackupDirectory, CurrentDirectory))
+                {
+                    return null;
+                }
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+
+            return Settings.BackupDirectory;
+        }
+
+        private static bool IsSamePath(string a, string b)
+        {
+            string fullA = Path.GetFullPath(a).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            string fullB = Path.GetFullPath(b).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+            return string.Equals(fullA, fullB, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsCardContentDirectory(string path)
+        {
+            try
+            {
+                DirectoryInfo dir = new DirectoryInfo(path);
+
+                if (!string.Equals(dir.Name, "CONTENT", StringComparison.OrdinalIgnoreCase) || dir.Parent == null || dir.Parent.Parent != null)
+                {
+                    return false;
+                }
+
+                return new DriveInfo(dir.Root.FullName).DriveType == DriveType.Removable;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
+        /* watches the backup directory while comparing, so changes there show up in the list too */
+        private void UpdateCompareWatcher(string compareDirectory)
+        {
+            if (CompareDirectory != null && compareDirectory != null && IsSamePath(CompareDirectory, compareDirectory) && CompareWatcher != null)
+            {
+                return;
+            }
+
+            if (CompareWatcher != null)
+            {
+                CompareWatcher.EnableRaisingEvents = false;
+                CompareWatcher.Dispose();
+                CompareWatcher = null;
+            }
+
+            CompareDirectory = compareDirectory;
+
+            if (CompareDirectory == null)
+            {
+                return;
+            }
+
+            try
+            {
+                CompareWatcher = new FileSystemWatcher(CompareDirectory);
+                CompareWatcher.Changed += OnDirectoryChanged;
+                CompareWatcher.Created += OnDirectoryChanged;
+                CompareWatcher.Deleted += OnDirectoryChanged;
+                CompareWatcher.Renamed += OnDirectoryChanged;
+                CompareWatcher.EnableRaisingEvents = true;
+            }
+            catch (Exception ex)
+            {
+                LogWindow.Log(LogWindow.eLogLevel.Error, "Failed to watch backup directory '" + CompareDirectory + "': " + ex.Message);
+                CompareWatcher = null;
+            }
+        }
+
+        private ListViewGroup GetLocationGroup(eLocation location)
+        {
+            switch (location)
+            {
+                case eLocation.Both:
+                    return GroupOnBoth;
+                case eLocation.CardOnly:
+                    return GroupOnlyOnCard;
+                case eLocation.BackupOnly:
+                    return GroupOnlyOnBackup;
+            }
+            return null;
+        }
+
+        private static bool IsBackupOnlyItem(ListViewItem item)
+        {
+            return (item?.Tag as ListViewTag)?.Location == eLocation.BackupOnly;
+        }
+
+        private List<ListViewTag> GetTagsWithLocation(IEnumerable items, eLocation location)
+        {
+            return items.Cast<ListViewItem>()
+                .Select(i => i.Tag as ListViewTag)
+                .Where(t => t != null && t.Location == location)
+                .ToList();
+        }
+
+        /* flat files in the backup root have no CONTENT layout, they are not copied onto the card */
+        private static bool IsFlatRootFile(ListViewTag tag)
+        {
+            return string.Equals(tag.RelativePath, Path.GetFileName(tag.RelativePath), StringComparison.OrdinalIgnoreCase);
+        }
+
+        private List<ListViewTag> GetCopyToCardTags(IEnumerable items)
+        {
+            return GetTagsWithLocation(items, eLocation.BackupOnly).Where(t => !IsFlatRootFile(t)).ToList();
+        }
+
+        /* shows/enables the copy buttons and the group headers (with counts) for the comparison */
+        private void UpdateCompareControls()
+        {
+            bool compare = CompareDirectory != null;
+            int both = GetTagsWithLocation(lstTonies.Items, eLocation.Both).Count;
+            int cardOnly = GetTagsWithLocation(lstTonies.Items, eLocation.CardOnly).Count;
+            int backupOnly = GetCopyToCardTags(lstTonies.Items).Count;
+            bool copying = SyncCopyRunning;
+
+            GroupOnBoth.Header = "On SD card and backup (" + both + ")";
+            GroupOnlyOnCard.Header = "Only on SD card (" + cardOnly + ")";
+            GroupOnlyOnBackup.Header = "Only on backup (" + backupOnly + ")";
+
+            btnCopyToBackup.Visible = compare;
+            btnCopyToCard.Visible = compare;
+            btnCopyToBackup.Enabled = compare && !copying && cardOnly > 0;
+            btnCopyToCard.Enabled = compare && !copying && backupOnly > 0;
+        }
+
+        private void btnCopyToBackup_Click(object sender, EventArgs e)
+        {
+            CopyMissing(GetTagsWithLocation(lstTonies.Items, eLocation.CardOnly), true);
+        }
+
+        private void btnCopyToCard_Click(object sender, EventArgs e)
+        {
+            CopyMissing(GetCopyToCardTags(lstTonies.Items), false);
+        }
+
+        private void copyToBackupToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            CopyMissing(GetTagsWithLocation(lstTonies.SelectedItems, eLocation.CardOnly), true);
+        }
+
+        private void copyToCardToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            CopyMissing(GetCopyToCardTags(lstTonies.SelectedItems), false);
+        }
+
+        /// <summary>
+        /// Copies tonie files that are missing on the other side: card to backup (toBackup) or backup to card.
+        /// Keeps the relative layout, never overwrites an existing file, and carries over the Explorer title
+        /// (desktop.ini) into a directory that has none yet. Runs on a background thread.
+        /// </summary>
+        private void CopyMissing(List<ListViewTag> tags, bool toBackup)
+        {
+            if (CompareDirectory == null || CurrentDirectory == null || SyncCopyRunning || tags.Count == 0)
+            {
+                return;
+            }
+
+            string targetRoot = toBackup ? CompareDirectory : CurrentDirectory;
+            string question = "Copy " + tags.Count + " Tonie file" + (tags.Count == 1 ? "" : "s") +
+                (toBackup ? " to the backup directory" : " to the SD card") + " '" + targetRoot + "'?";
+
+            if (MessageBox.Show(question, toBackup ? "Copy to backup" : "Copy to SD card", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+            {
+                return;
+            }
+
+            var jobs = tags.Select(t => new Tuple<string, string>(t.FileName, Path.Combine(targetRoot, t.RelativePath))).ToList();
+
+            SyncCopyRunning = true;
+            btnAdd.Enabled = false;
+            btnDelete.Enabled = false;
+            btnSave.Enabled = false;
+            UpdateCompareControls();
+
+            SyncCopyThread = new SafeThread(() =>
+            {
+                int copied = 0;
+                List<string> errors = new List<string>();
+
+                foreach (var job in jobs)
+                {
+                    string source = job.Item1;
+                    string target = job.Item2;
+
+                    try
+                    {
+                        if (File.Exists(target))
+                        {
+                            errors.Add("'" + target + "' already exists, skipped.");
+                            continue;
+                        }
+
+                        string targetDir = Path.GetDirectoryName(target);
+                        Directory.CreateDirectory(targetDir);
+                        File.Copy(source, target, false);
+
+                        /* the hidden attribute is the "live" flag, make sure it is kept */
+                        FileAttributes sourceAttributes = File.GetAttributes(source);
+                        if (sourceAttributes.HasFlag(FileAttributes.Hidden) && !File.GetAttributes(target).HasFlag(FileAttributes.Hidden))
+                        {
+                            File.SetAttributes(target, File.GetAttributes(target) | FileAttributes.Hidden);
+                        }
+                        copied++;
+
+                        /* tonies in subdirectories may carry an Explorer title in desktop.ini */
+                        string sourceDir = Path.GetDirectoryName(source);
+                        string sourceIni = Path.Combine(sourceDir, DesktopIniFileName);
+                        if (!IsSamePath(targetDir, targetRoot) && File.Exists(sourceIni) && !File.Exists(Path.Combine(targetDir, DesktopIniFileName)))
+                        {
+                            try
+                            {
+                                WriteDesktopIni(targetDir, ReadDesktopIni(sourceIni));
+                            }
+                            catch (Exception ex)
+                            {
+                                errors.Add("'" + target + "' was copied, but its Explorer title could not be copied: " + ex.Message);
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        errors.Add("Failed to copy '" + source + "' to '" + target + "': " + ex.Message);
+                    }
+                }
+
+                this.BeginInvoke(new Action(() =>
+                {
+                    SyncCopyRunning = false;
+
+                    string summary = copied + " of " + jobs.Count + " Tonie file" + (jobs.Count == 1 ? " was" : "s were") + " copied.";
+                    if (errors.Count > 0)
+                    {
+                        summary += Environment.NewLine + Environment.NewLine + string.Join(Environment.NewLine, errors);
+                    }
+                    MessageBox.Show(summary, toBackup ? "Copy to backup" : "Copy to SD card", MessageBoxButtons.OK, errors.Count > 0 ? MessageBoxIcon.Warning : MessageBoxIcon.Information);
+
+                    RefreshCardContent();
+                }));
+            }, "CopyThread");
+            SyncCopyThread.Start();
+        }
+
+        #endregion
 
         private void StartAnalyzeThread()
         {

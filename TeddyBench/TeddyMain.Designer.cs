@@ -79,6 +79,8 @@ namespace TeddyBench
             this.btnRemoveAllLiveFlags = new System.Windows.Forms.Button();
             this.btnAddAllExplorerTitles = new System.Windows.Forms.Button();
             this.btnRemoveAllExplorerTitles = new System.Windows.Forms.Button();
+            this.btnCopyToBackup = new System.Windows.Forms.Button();
+            this.btnCopyToCard = new System.Windows.Forms.Button();
             this.lblMessage = new System.Windows.Forms.Label();
             this.statusStrip1 = new System.Windows.Forms.StatusStrip();
             this.statusLabel = new System.Windows.Forms.ToolStripStatusLabel();
@@ -93,6 +95,8 @@ namespace TeddyBench
             this.changeChapterInformationToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.addExplorerTitleToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.removeExplorerTitleToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.copyToBackupToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.copyToCardToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.toolStripMenuItem2 = new System.Windows.Forms.ToolStripSeparator();
             this.showInExplorerToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.exportTooggToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
@@ -360,6 +364,8 @@ namespace TeddyBench
             //
             // splitContainer1.Panel2
             //
+            this.splitContainer1.Panel2.Controls.Add(this.btnCopyToCard);
+            this.splitContainer1.Panel2.Controls.Add(this.btnCopyToBackup);
             this.splitContainer1.Panel2.Controls.Add(this.btnRemoveAllLiveFlags);
             this.splitContainer1.Panel2.Controls.Add(this.btnSetAllLiveFlags);
             this.splitContainer1.Panel2.Controls.Add(this.btnRemoveAllExplorerTitles);
@@ -570,6 +576,28 @@ namespace TeddyBench
             this.btnRemoveAllExplorerTitles.UseVisualStyleBackColor = true;
             this.btnRemoveAllExplorerTitles.Click += new System.EventHandler(this.btnRemoveAllExplorerTitles_Click);
             //
+            // btnCopyToBackup
+            //
+            this.btnCopyToBackup.Location = new System.Drawing.Point(4, 281);
+            this.btnCopyToBackup.Name = "btnCopyToBackup";
+            this.btnCopyToBackup.Size = new System.Drawing.Size(80, 38);
+            this.btnCopyToBackup.TabIndex = 6;
+            this.btnCopyToBackup.Text = "Copy to\r\nbackup";
+            this.btnCopyToBackup.UseVisualStyleBackColor = true;
+            this.btnCopyToBackup.Visible = false;
+            this.btnCopyToBackup.Click += new System.EventHandler(this.btnCopyToBackup_Click);
+            //
+            // btnCopyToCard
+            //
+            this.btnCopyToCard.Location = new System.Drawing.Point(4, 325);
+            this.btnCopyToCard.Name = "btnCopyToCard";
+            this.btnCopyToCard.Size = new System.Drawing.Size(80, 38);
+            this.btnCopyToCard.TabIndex = 7;
+            this.btnCopyToCard.Text = "Copy to\r\nSD-card";
+            this.btnCopyToCard.UseVisualStyleBackColor = true;
+            this.btnCopyToCard.Visible = false;
+            this.btnCopyToCard.Click += new System.EventHandler(this.btnCopyToCard_Click);
+            //
             // lblMessage
             // 
             this.lblMessage.AutoSize = true;
@@ -621,6 +649,8 @@ namespace TeddyBench
             this.changeChapterInformationToolStripMenuItem,
             this.addExplorerTitleToolStripMenuItem,
             this.removeExplorerTitleToolStripMenuItem,
+            this.copyToBackupToolStripMenuItem,
+            this.copyToCardToolStripMenuItem,
             this.toolStripMenuItem2,
             this.showInExplorerToolStripMenuItem,
             this.exportTooggToolStripMenuItem,
@@ -692,6 +722,20 @@ namespace TeddyBench
             this.removeExplorerTitleToolStripMenuItem.Size = new System.Drawing.Size(272, 22);
             this.removeExplorerTitleToolStripMenuItem.Text = "Remove title information for Explorer";
             this.removeExplorerTitleToolStripMenuItem.Click += new System.EventHandler(this.removeExplorerTitleToolStripMenuItem_Click);
+            //
+            // copyToBackupToolStripMenuItem
+            //
+            this.copyToBackupToolStripMenuItem.Name = "copyToBackupToolStripMenuItem";
+            this.copyToBackupToolStripMenuItem.Size = new System.Drawing.Size(272, 22);
+            this.copyToBackupToolStripMenuItem.Text = "Copy to backup";
+            this.copyToBackupToolStripMenuItem.Click += new System.EventHandler(this.copyToBackupToolStripMenuItem_Click);
+            //
+            // copyToCardToolStripMenuItem
+            //
+            this.copyToCardToolStripMenuItem.Name = "copyToCardToolStripMenuItem";
+            this.copyToCardToolStripMenuItem.Size = new System.Drawing.Size(272, 22);
+            this.copyToCardToolStripMenuItem.Text = "Copy to SD-card";
+            this.copyToCardToolStripMenuItem.Click += new System.EventHandler(this.copyToCardToolStripMenuItem_Click);
             //
             // toolStripMenuItem2
             //
@@ -827,5 +871,9 @@ namespace TeddyBench
         private System.Windows.Forms.Button btnRemoveAllExplorerTitles;
         private System.Windows.Forms.ToolStripMenuItem addExplorerTitleToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem removeExplorerTitleToolStripMenuItem;
+        private System.Windows.Forms.Button btnCopyToBackup;
+        private System.Windows.Forms.Button btnCopyToCard;
+        private System.Windows.Forms.ToolStripMenuItem copyToBackupToolStripMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem copyToCardToolStripMenuItem;
     }
 }
