@@ -556,6 +556,7 @@ private async void reportNFCTagToolStripMenuItem_Click(object sender, EventArgs 
         private void flashFirmwareToolStripMenuItem_Click(object sender, EventArgs e)
         {
             OpenFileDialog dlg = new OpenFileDialog();
+            dlg.RestoreDirectory = true;
 
             dlg.Title = "Please select the fullimage.elf you want to flash";
             dlg.Filter = "Firmware ELF files (*.elf)|*.elf|All files (*.*)|*.*";
@@ -568,6 +569,7 @@ private async void reportNFCTagToolStripMenuItem_Click(object sender, EventArgs 
         private void flashBootloaderToolStripMenuItem_Click(object sender, EventArgs e)
         {
             OpenFileDialog dlg = new OpenFileDialog();
+            dlg.RestoreDirectory = true;
 
             dlg.Title = "Please select the bootrom.elf you want to flash";
             dlg.Filter = "Bootloader ELF files (*.elf)|*.elf|All files (*.*)|*.*";

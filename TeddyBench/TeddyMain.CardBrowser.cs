@@ -234,7 +234,22 @@ private void StartThreads()
                 return;
             }
 
-            RefreshCardContent();
+            /* a single change raises a burst of events, reload once after it settled */
+            this.BeginInvoke(new Action(() =>
+            {
+                if (RefreshDebounceTimer == null)
+                {
+                    RefreshDebounceTimer = new System.Windows.Forms.Timer();
+                    RefreshDebounceTimer.Interval = 500;
+                    RefreshDebounceTimer.Tick += (s, ev) =>
+                    {
+                        RefreshDebounceTimer.Stop();
+                        RefreshCardContent();
+                    };
+                }
+                RefreshDebounceTimer.Stop();
+                RefreshDebounceTimer.Start();
+            }));
         }
 
         private void RefreshCardContent()
@@ -258,6 +273,7 @@ private void StartThreads()
             string compareDirectory = GetCompareDirectory();
             UpdateCompareWatcher(compareDirectory);
 
+            lstTonies.BeginUpdate();
             lock (RegisteredItems)
             {
                 btnAdd.Enabled = !SyncCopyRunning;
@@ -312,6 +328,7 @@ private void StartThreads()
                 }
                 lstTonies.Sort();
             }
+            lstTonies.EndUpdate();
 
             UpdateCompareControls();
             StartAnalyzeThread();
@@ -675,21 +692,54 @@ private void StartThreads()
         private void AnalyzeMain()
         {
             ByteQueue ByteBuffer = new ByteQueue();
+            /* tonie info generation each item was analyzed with. the list item is only updated
+             * once the UI applies the queued update, so its ImageKey can not tell what is done */
+            Dictionary<ListViewTag, int> analyzed = new Dictionary<ListViewTag, int>();
+            /* image keys already loaded or queued for the image list */
+            HashSet<string> requestedImages = new HashSet<string>();
+
             while (!AnalyzeThreadStop)
             {
                 Thread.Sleep(100);
+
+                /* all list changes of one pass are applied in one go with a single sort */
+                List<Action> uiUpdates = new List<Action>();
+                /* a long first pass (image downloads) still shows its progress every now and then */
+                Stopwatch flushWatch = Stopwatch.StartNew();
+                int generation;
+                lock (TonieInfoLock)
+                {
+                    generation = TonieInfoGeneration;
+                }
 
                 lock (RegisteredItems)
                 {
                     LogWindow.Log(LogWindow.eLogLevel.DebugVerbose, "Rescanning");
                     foreach (var entry in RegisteredItems)
                     {
+                        if (AnalyzeThreadStop)
+                        {
+                            break;
+                        }
+
+                        if (uiUpdates.Count > 0 && flushWatch.ElapsedMilliseconds > 250)
+                        {
+                            PostListUpdates(uiUpdates);
+                            uiUpdates = new List<Action>();
+                            flushWatch.Restart();
+                        }
+
                         ListViewTag tag = entry.Key;
                         LogWindow.Log(LogWindow.eLogLevel.DebugVerbose, "  Filename: " + entry.Key.FileName);
                         LogWindow.Log(LogWindow.eLogLevel.DebugVerbose, "     Image: " + entry.Value.ImageKey);
 
-                        if (entry.Value.ImageKey == "unknown")
+                        /* analyze each item once, unknown ones again when the tonie info was reloaded */
+                        int analyzedGeneration;
+                        bool pending = !analyzed.TryGetValue(tag, out analyzedGeneration) || (analyzedGeneration != generation && entry.Value.ImageKey == "unknown");
+
+                        if (pending)
                         {
+                            analyzed[tag] = generation;
                             try
                             {
                                 LogWindow.Log(LogWindow.eLogLevel.DebugVerbose, "GetTonieAudio...");
@@ -701,7 +751,7 @@ private void StartThreads()
 
                                 lock (TonieInfoLock)
                                 {
-                                    found = TonieInfo.Where(t => t.Hash.Where(h => h == hash).Count() > 0);
+                                    found = TonieInfo.Where(t => t.Hash.Contains(hash)).ToArray();
                                 }
                                 string tonieName = "[" + tag.Uid + "]" + Environment.NewLine + "(unknown: " + dumpFile.Header.AudioId.ToString("X8") + ")";
 
@@ -727,15 +777,16 @@ private void StartThreads()
                                             tonieName = customInfo.Title;
                                         }
                                     }
-                                    if (!string.IsNullOrEmpty(info.Pic) && !lstTonies.LargeImageList.Images.ContainsKey(hash))
+                                    if (!string.IsNullOrEmpty(info.Pic) && !requestedImages.Contains(hash) && !lstTonies.LargeImageList.Images.ContainsKey(hash))
                                     {
+                                        requestedImages.Add(hash);
                                         Image img = GetImage(info.Pic, hash);
                                         if (img != null)
                                         {
-                                            this.BeginInvoke(new Action(() =>
+                                            uiUpdates.Add(() =>
                                             {
                                                 lstTonies.LargeImageList.Images.Add(hash, img);
-                                            }));
+                                            });
                                         }
                                     }
                                     update = true;
@@ -796,10 +847,11 @@ private void StartThreads()
                                         if (File.Exists(customPath))
                                         {
                                             string customImageKey = GetCustomImageKey(hash);
-                                            if (!lstTonies.LargeImageList.Images.ContainsKey(customImageKey))
+                                            if (!requestedImages.Contains(customImageKey) && !lstTonies.LargeImageList.Images.ContainsKey(customImageKey))
                                             {
+                                                requestedImages.Add(customImageKey);
                                                 Image cimg = LoadResizedImage(customPath);
-                                                this.BeginInvoke(new Action(() =>
+                                                uiUpdates.Add(() =>
                                                 {
                                                     try
                                                     {
@@ -809,7 +861,7 @@ private void StartThreads()
                                                     {
                                                         cimg.Dispose();
                                                     }
-                                                }));
+                                                });
                                             }
 
                                             newImakeKey = customImageKey;
@@ -831,14 +883,14 @@ private void StartThreads()
 
                                 if (update)
                                 {
-                                    this.BeginInvoke(new Action(() =>
+                                    ListViewItem item = entry.Value;
+                                    uiUpdates.Add(() =>
                                     {
                                         LogWindow.Log(LogWindow.eLogLevel.DebugVerbose, "     Update list");
-                                        entry.Value.Text = newText;
-                                        entry.Value.ImageKey = newImakeKey;
-                                        entry.Value.ToolTipText = newToolTipText;
-                                        UpdateSorting();
-                                    }));
+                                        item.Text = newText;
+                                        item.ImageKey = newImakeKey;
+                                        item.ToolTipText = newToolTipText;
+                                    });
                                 }
                             }
                             catch (Exception ex)
@@ -848,7 +900,35 @@ private void StartThreads()
                     }
                     LogWindow.Log(LogWindow.eLogLevel.DebugVerbose, "Done");
                 }
+
+                PostListUpdates(uiUpdates);
             }
+        }
+
+        /* applies the collected list changes on the UI thread with one sort */
+        private void PostListUpdates(List<Action> uiUpdates)
+        {
+            if (uiUpdates.Count == 0 || AnalyzeThreadStop)
+            {
+                return;
+            }
+
+            this.BeginInvoke(new Action(() =>
+            {
+                lstTonies.BeginUpdate();
+                try
+                {
+                    foreach (Action uiUpdate in uiUpdates)
+                    {
+                        uiUpdate();
+                    }
+                    UpdateSorting();
+                }
+                finally
+                {
+                    lstTonies.EndUpdate();
+                }
+            }));
         }
     }
 }

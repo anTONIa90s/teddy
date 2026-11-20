@@ -143,6 +143,7 @@ public void LoadJson(bool force = false)
                     {
                         TonieInfoCustom.Clear();
                     }
+                    TonieInfoGeneration++;
                 }
             }
             catch (Exception e)

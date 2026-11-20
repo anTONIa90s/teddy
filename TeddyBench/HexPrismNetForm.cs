@@ -780,6 +780,7 @@ namespace TeddyBench
             SaveActiveDesign();
             using (SaveFileDialog dialog = new SaveFileDialog())
             {
+                dialog.RestoreDirectory = true;
                 dialog.Filter = DesignFileFilter;
                 dialog.DefaultExt = "hexagon";
                 dialog.AddExtension = true;
@@ -814,6 +815,7 @@ namespace TeddyBench
 
             using (OpenFileDialog dialog = new OpenFileDialog())
             {
+                dialog.RestoreDirectory = true;
                 dialog.Filter = DesignFileFilter;
                 if (dialog.ShowDialog(this) != DialogResult.OK)
                 {
@@ -1160,6 +1162,7 @@ namespace TeddyBench
         {
             using (OpenFileDialog dialog = new OpenFileDialog())
             {
+                dialog.RestoreDirectory = true;
                 dialog.Filter = "Images (*.png;*.jpg;*.jpeg;*.bmp;*.gif)|*.png;*.jpg;*.jpeg;*.bmp;*.gif|All files (*.*)|*.*";
                 if (dialog.ShowDialog(this) != DialogResult.OK)
                 {
@@ -1291,6 +1294,7 @@ namespace TeddyBench
             fileName = null;
             using (OpenFileDialog dialog = new OpenFileDialog())
             {
+                dialog.RestoreDirectory = true;
                 dialog.Title = "Select clip art or image";
                 dialog.Filter = "Image files|*.png;*.jpg;*.jpeg;*.bmp;*.gif|PNG files|*.png|JPEG files|*.jpg;*.jpeg|All files|*.*";
                 if (dialog.ShowDialog(this) != DialogResult.OK)
@@ -1484,6 +1488,7 @@ namespace TeddyBench
             SaveActiveDesign();
             using (SaveFileDialog dialog = new SaveFileDialog())
             {
+                dialog.RestoreDirectory = true;
                 dialog.Filter = "Hexagon net layout (*.hexnet)|*.hexnet|All files (*.*)|*.*";
                 dialog.DefaultExt = "hexnet";
                 dialog.AddExtension = true;
@@ -1512,6 +1517,7 @@ namespace TeddyBench
         {
             using (OpenFileDialog dialog = new OpenFileDialog())
             {
+                dialog.RestoreDirectory = true;
                 dialog.Filter = "Hexagon net layout (*.hexnet)|*.hexnet|All files (*.*)|*.*";
                 if (dialog.ShowDialog(this) != DialogResult.OK)
                 {

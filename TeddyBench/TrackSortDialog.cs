@@ -320,6 +320,7 @@ namespace TeddyBench
         private void btnAddTracks_Click(object sender, EventArgs e)
         {
             OpenFileDialog dlg = new OpenFileDialog();
+            dlg.RestoreDirectory = true;
             dlg.Multiselect = true;
             dlg.Filter = "Audio files (*.mp3;*.ogg)|*.mp3;*.ogg|All files (*.*)|*.*";
 

@@ -13,6 +13,8 @@ namespace TeddyBench
             ThreadStart = start;
             Thread = new Thread(ThreadMain);
             Thread.Name = name;
+            /* do not keep the process (and its handles on the SD card) alive after the main window closed */
+            Thread.IsBackground = true;
         }
 
         private void ThreadMain()

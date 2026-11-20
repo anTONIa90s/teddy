@@ -54,6 +54,9 @@ namespace TeddyBench
         private static TonieTools.TonieData[] TonieInfo = new TonieTools.TonieData[0];
         private static Dictionary<string, CustomTonieInfo> TonieInfoCustom = new Dictionary<string, CustomTonieInfo>();
         private static string TonieInfoString = "";
+        /* incremented whenever TonieInfo is (re)loaded, so unknown tonies get looked up again */
+        private static int TonieInfoGeneration = 0;
+        private System.Windows.Forms.Timer RefreshDebounceTimer = null;
 
         private Dictionary<string, Tuple<TonieAudio, DateTime>> CachedAudios = new Dictionary<string, Tuple<TonieAudio, DateTime>>();
         private ListViewItem LastSelectediItem = null;
@@ -285,6 +288,12 @@ namespace TeddyBench
                 SyncCopyThread.Join(100);
                 SyncCopyThread.Abort();
                 SyncCopyThread = null;
+            }
+            if (RefreshDebounceTimer != null)
+            {
+                RefreshDebounceTimer.Stop();
+                RefreshDebounceTimer.Dispose();
+                RefreshDebounceTimer = null;
             }
             if (CardWatcher != null)
             {

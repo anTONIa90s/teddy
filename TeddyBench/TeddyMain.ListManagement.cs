@@ -88,6 +88,7 @@ private void aboutToolStripMenuItem_Click(object sender, EventArgs e)
             }
 
             OpenFileDialog dlg = new OpenFileDialog();
+            dlg.RestoreDirectory = true;
             dlg.Filter = "Image files (*.png;*.jpg;*.jpeg;*.bmp;*.gif)|*.png;*.jpg;*.jpeg;*.bmp;*.gif|All files (*.*)|*.*";
             dlg.Title = "Select custom image";
 
